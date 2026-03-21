@@ -128,6 +128,12 @@ body{font-family:sans-serif;background:#f5f5f3;color:#1a1a18;min-height:100vh;fo
 .filter-btn.on{background:#185FA5;color:#fff;border-color:#185FA5;}
 .tag-fixed{background:#dbeafe;color:#1d4ed8;}
 .tag-var{background:#fef3c7;color:#92400e;}
+/* 드래그 핸들 */
+.drag-handle{cursor:grab;color:#ccc;font-size:16px;padding:0 4px;user-select:none;flex-shrink:0;}
+.drag-handle:active{cursor:grabbing;}
+.item.sortable-ghost{opacity:.4;background:#e8f0fe;}
+.item.sortable-chosen{box-shadow:0 4px 12px rgba(0,0,0,.15);}
+.sortable-drag{opacity:0;}
 .cat-item:last-child{border:none;}
 .add-row{display:flex;gap:6px;margin-top:10px;}
 .add-row input{flex:1;padding:7px 9px;border:1px solid #ddd;border-radius:8px;font-size:12px;}
@@ -381,6 +387,7 @@ body{font-family:sans-serif;background:#f5f5f3;color:#1a1a18;min-height:100vh;fo
   <div class="mfoot"><button class="btn" onclick="closeModal('m-memo')">취소</button><button class="btn btn-p" onclick="saveMemo()">저장</button></div>
 </div></div>
 
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script>
@@ -583,32 +590,10 @@ function rDash(){
 }
 
 // ── 자산 ──
-function rAssets(){
-  if(!S)return;const r=S.rate;
-  ['jp','kr','inv','fixed','debt'].forEach(type=>{
-    const list=S.assets.filter(a=>a.type===type);
-    $('al-'+type).innerHTML=list.length?list.map(a=>{
-      const isU=a.cur==='USD',isD=type==='debt',isF=type==='fixed';
-      const v=isU?ND(Math.abs(a.amt)):N(Math.abs(a.amt));
-      let sub='';
-      if(isU)sub=`≈¥${N(Math.abs(a.amt)*r.uj)} / ₩${N(Math.abs(a.amt)*r.uj*r.jk)}`;
-      else if(a.cur==='KRW')sub=`≈¥${N(Math.abs(a.amt)/r.jk)}`;
-      else if(Math.abs(a.amt)>0)sub=`≈₩${N(Math.abs(a.amt)*r.jk)}`;
-      if(isF&&a.fkind)sub=(sub?sub+' · ':'')+a.fkind+(a.fmemo?' · '+a.fmemo:'');
-      return`<div class="item"><div class="item-main"><div class="item-name">${a.name}<span class="tag ${isU?'t-usd':a.cur==='KRW'?'t-g':'t-b'}">${a.cur}</span>${isF&&a.fkind?`<span class="tag t-gray">${a.fkind}</span>`:''}</div>${sub?`<div class="item-sub">${sub}</div>`:''}</div><div class="item-r"><div class="amt ${isD?'neg':isF?'muted':a.amt<0?'neg':'pos'}">${isD?'-':''}${SYM(a.cur)}${v}</div><button class="btn btn-s" onclick="editAsset(${a.id})">수정</button><button class="btn btn-s btn-d" onclick="delAsset(${a.id})">삭제</button></div></div>`;
-    }).join(''):'<div class="empty">없음</div>';
-  });
-  const finJ=S.assets.filter(a=>a.type!=='debt'&&a.type!=='fixed').reduce((s,a)=>s+toJ(a.amt,a.cur,S.rate),0);
-  const fixdJ=S.assets.filter(a=>a.type==='fixed').reduce((s,a)=>s+toJ(a.amt,a.cur,S.rate),0);
-  const debtJ=S.assets.filter(a=>a.type==='debt').reduce((s,a)=>s+toJ(a.amt,a.cur,S.rate),0);
-  const net=finJ+fixdJ-debtJ;
-  $('s-fin').textContent='¥'+N(finJ);$('s-fixd').textContent='¥'+N(fixdJ);$('s-debt').textContent='¥'+N(debtJ);
-  $('s-net-j').textContent='¥'+N(net);$('s-net-k').textContent='₩'+N(net*S.rate.jk);
-}
 function onAType(){
   const t=$('a-type').value;
   $('a-fixed-extra').style.display=t==='fixed'?'block':'none';
-  $('a-hint').textContent={debt:'부채는 양수로 입력',fixed:'현재 평가액 입력',jp:'잔액 입력',kr:'잔액 입력',inv:'평가액 입력'}[t]||'';
+  $('a-hint').textContent={debt:'부채는 양수로 입력 (예: 3,000,000)',fixed:'현재 평가액 입력',jp:'잔액 입력 (마이너스 가능)',kr:'잔액 입력 (마이너스 가능)',inv:'평가액 입력 (신용 마이너스 가능)'}[t]||'';
 }
 function openAssetModal(){
   $('a-title').textContent='자산 추가';
@@ -632,7 +617,6 @@ function saveAsset(){
   const eid=parseInt($('a-eid').value),type=$('a-type').value;
   const d={name:$('a-name').value.trim(),amt:parseFloat($('a-amt').value)||0,cur:$('a-cur').value,type};
   if(!d.name){alert('자산명을 입력하세요.');return;}
-  if(type==='debt')d.amt=Math.abs(d.amt);
   if(type==='fixed'){d.fkind=$('a-fkind').value;d.fmemo=$('a-fmemo').value.trim();}
   if(eid){const i=S.assets.findIndex(a=>a.id===eid);if(i>=0)S.assets[i]={...S.assets[i],...d};}
   else S.assets.push({id:S.nid++,...d});
@@ -759,13 +743,16 @@ function rAssets(){
     const list=S.assets.filter(a=>a.type===type);
     $('al-'+type).innerHTML=list.length?list.map(a=>{
       const isU=a.cur==='USD',isD=type==='debt',isF=type==='fixed';
+      const isNeg=a.amt<0;
       const v=isU?ND(Math.abs(a.amt)):N(Math.abs(a.amt));
       let sub='';
       if(isU)sub=`≈¥${N(Math.abs(a.amt)*r.uj)} / ₩${N(Math.abs(a.amt)*r.uj*r.jk)}`;
       else if(a.cur==='KRW')sub=`≈¥${N(Math.abs(a.amt)/r.jk)}`;
       else if(Math.abs(a.amt)>0)sub=`≈₩${N(Math.abs(a.amt)*r.jk)}`;
       if(isF&&a.fkind)sub=(sub?sub+' · ':'')+a.fkind+(a.fmemo?' · '+a.fmemo:'');
-      return`<div class="item"><div class="item-main"><div class="item-name">${a.name}<span class="tag ${isU?'t-usd':a.cur==='KRW'?'t-g':'t-b'}">${a.cur}</span>${isF&&a.fkind?`<span class="tag t-gray">${a.fkind}</span>`:''}</div>${sub?`<div class="item-sub">${sub}</div>`:''}</div><div class="item-r"><div class="amt ${isD?'neg':isF?'muted':a.amt<0?'neg':'pos'}">${isD?'-':''}${SYM(a.cur)}${v}</div><button class="btn btn-s" onclick="editAsset(${a.id})">수정</button><button class="btn btn-s btn-d" onclick="delAsset(${a.id})">삭제</button></div></div>`;
+      const colorClass=isD?'neg':isNeg?'neg':isF?'muted':'pos';
+      const prefix=isNeg||isD?'-':'';
+      return`<div class="item"><div class="item-main"><div class="item-name">${a.name}<span class="tag ${isU?'t-usd':a.cur==='KRW'?'t-g':'t-b'}">${a.cur}</span>${isF&&a.fkind?`<span class="tag t-gray">${a.fkind}</span>`:''}</div>${sub?`<div class="item-sub">${sub}</div>`:''}</div><div class="item-r"><div class="amt ${colorClass}">${prefix}${SYM(a.cur)}${v}</div><button class="btn btn-s" onclick="editAsset(${a.id})">수정</button><button class="btn btn-s btn-d" onclick="delAsset(${a.id})">삭제</button></div></div>`;
     }).join(''):'<div class="empty">없음</div>';
   });
   const finJ=S.assets.filter(a=>a.type!=='debt'&&a.type!=='fixed').reduce((s,a)=>s+toJ(a.amt,a.cur,S.rate),0);
@@ -841,10 +828,18 @@ function renderExp(){
   });
   if(expFilter==='fixed') list=list.filter(e=>e.rec==='fixed'||e.rec===true);
   else if(expFilter==='var') list=list.filter(e=>e.rec!=='fixed'&&e.rec!==true);
-  $('exp-list').innerHTML=list.map(e=>{
+  const expEl=$('exp-list');
+  expEl.innerHTML=list.map(e=>{
     const isFixed=e.rec==='fixed'||e.rec===true;
-    return`<div class="item"><div class="item-main"><div class="item-name">${e.name}<span class="tag ${isFixed?'tag-fixed':'tag-var'}">${isFixed?'고정':'변동'}</span></div><div class="item-sub">${e.date?' '+e.date+' ·':''} ${e.cat} · ≈¥${N(toJ(e.amt,e.cur,r))}</div></div><div class="item-r"><div class="amt neg">${SYM(e.cur)}${N(e.amt)}</div><button class="btn btn-s" onclick="openExpModal(${e.id})">수정</button><button class="btn btn-s btn-d" onclick="delExp(${e.id})">삭제</button></div></div>`;
+    return`<div class="item" data-id="${e.id}"><span class="drag-handle">⠿</span><div class="item-main"><div class="item-name">${e.name}<span class="tag ${isFixed?'tag-fixed':'tag-var'}">${isFixed?'고정':'변동'}</span></div><div class="item-sub">${e.date?' '+e.date+' ·':''} ${e.cat} · ≈¥${N(toJ(e.amt,e.cur,r))}</div></div><div class="item-r"><div class="amt neg">${SYM(e.cur)}${N(e.amt)}</div><button class="btn btn-s" onclick="openExpModal(${e.id})">수정</button><button class="btn btn-s btn-d" onclick="delExp(${e.id})">삭제</button></div></div>`;
   }).join('')||'<div class="empty">없음</div>';
+  if(list.length>1) Sortable.create(expEl,{handle:'.drag-handle',animation:150,onEnd(){
+    const ids=[...expEl.querySelectorAll('.item[data-id]')].map(x=>parseInt(x.dataset.id));
+    const filtered=S.exps.filter(e=>ids.includes(e.id));
+    const others=S.exps.filter(e=>!ids.includes(e.id));
+    const reordered=ids.map(id=>filtered.find(e=>e.id===id)).filter(Boolean);
+    S.exps=[...others,...reordered]; fbSave();
+  }});
   const totJ=list.reduce((s,e)=>s+toJ(e.amt,e.cur,r),0);
   const cats=[...new Set(list.map(e=>e.cat))];
   $('exp-sum').innerHTML=cats.map(c=>{const s=list.filter(e=>e.cat===c).reduce((a,e)=>a+toJ(e.amt,e.cur,r),0);return`<div class="srow"><span>${c}</span><span>¥${N(s)}</span></div>`;}).join('')
@@ -875,7 +870,13 @@ function saveInc(){
 function rInc(){
   if(!S)return;const r=S.rate;
   const list=[...S.incs].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
-  $('inc-list').innerHTML=list.map(e=>`<div class="item"><div class="item-main"><div class="item-name">${e.name}</div><div class="item-sub">${e.date} · ≈¥${N(toJ(e.amt,e.cur,r))}</div></div><div class="item-r"><div class="amt pos">${SYM(e.cur)}${N(e.amt)}</div><button class="btn btn-s" onclick="openIncModal(${e.id})">수정</button><button class="btn btn-s btn-d" onclick="delInc(${e.id})">삭제</button></div></div>`).join('')||'<div class="empty">없음</div>';
+  const incEl=$('inc-list');
+  incEl.innerHTML=list.map(e=>`<div class="item" data-id="${e.id}"><span class="drag-handle">⠿</span><div class="item-main"><div class="item-name">${e.name}</div><div class="item-sub">${e.date} · ≈¥${N(toJ(e.amt,e.cur,r))}</div></div><div class="item-r"><div class="amt pos">${SYM(e.cur)}${N(e.amt)}</div><button class="btn btn-s" onclick="openIncModal(${e.id})">수정</button><button class="btn btn-s btn-d" onclick="delInc(${e.id})">삭제</button></div></div>`).join('')||'<div class="empty">없음</div>';
+  if(list.length>1) Sortable.create(incEl,{handle:'.drag-handle',animation:150,onEnd(){
+    const ids=[...incEl.querySelectorAll('.item[data-id]')].map(x=>parseInt(x.dataset.id));
+    const reordered=ids.map(id=>S.incs.find(e=>e.id===id)).filter(Boolean);
+    S.incs=reordered; fbSave();
+  }});
   const t=list.reduce((s,e)=>s+toJ(e.amt,e.cur,r),0);
   $('inc-total').textContent='¥'+N(t)+' (₩'+N(t*r.jk)+')';
 }
