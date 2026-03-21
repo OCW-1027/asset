@@ -404,43 +404,118 @@ function defaultData(){
   };
 }
 
-let S=null, dbRef=null, saveTimer=null, appInited=false;
+const LS_KEY='assetMgr_v1';
+let S=null, dbRef=null, saveTimer=null, appInited=false, fbConnected=false;
 
 function setSyncBadge(s){
   const el=document.getElementById('sync-badge');if(!el)return;
   if(s==='ok'){el.textContent='동기화됨';el.className='sync-status sync-ok';}
   else if(s==='ing'){el.textContent='저장 중...';el.className='sync-status sync-ing';}
-  else{el.textContent='오프라인';el.className='sync-status sync-err';}
+  else{el.textContent='로컬저장';el.className='sync-status sync-err';}
 }
+
+// 로컬스토리지 저장
+function saveLocal(){
+  try{localStorage.setItem(LS_KEY,JSON.stringify(S));}catch(e){}
+}
+
+// Firebase 저장 (연결됐을 때만)
 function saveFB(){
-  if(!S||!dbRef)return;
+  saveLocal(); // 항상 로컬에 먼저 저장
+  if(!dbRef||!fbConnected)return;
   setSyncBadge('ing');
   clearTimeout(saveTimer);
   saveTimer=setTimeout(()=>{
-    dbRef.set(JSON.parse(JSON.stringify(S))).then(()=>setSyncBadge('ok')).catch(()=>setSyncBadge('err'));
+    dbRef.set(JSON.parse(JSON.stringify(S))).then(()=>setSyncBadge('ok')).catch(e=>{console.error(e);setSyncBadge('로컬저장');});
   },800);
 }
+
 function showApp(){
   document.getElementById('dash-loading').style.display='none';
   document.getElementById('dash-content').style.display='block';
   renderDash();
 }
+
+function mergeData(local, remote){
+  // nid는 더 큰 값 사용 (ID 충돌 방지)
+  if(remote.nid > local.nid) return remote;
+  if(local.nid > remote.nid) return local;
+  return remote; // 같으면 remote 우선
+}
+
 function initApp(){
   if(appInited)return; appInited=true;
   document.getElementById('hdr-dt').textContent=new Date().toLocaleDateString('ko-KR');
-  dbRef=db.ref('assetData');
-  dbRef.on('value',snap=>{
-    const v=snap.val();
-    S=v?v:defaultData();
-    if(!v)dbRef.set(S);
-    setSyncBadge('ok');
-    showApp();
-  },err=>{
-    console.error(err);
-    setSyncBadge('err');
-    if(!S)S=defaultData();
-    showApp();
-  });
+
+  // 1. 로컬스토리지에서 먼저 로드 → 즉시 화면 표시
+  let localData=null;
+  try{
+    const raw=localStorage.getItem(LS_KEY);
+    if(raw) localData=JSON.parse(raw);
+  }catch(e){}
+
+  S = localData || defaultData();
+  if(!localData) saveLocal();
+  showApp();
+  setSyncBadge('로컬저장');
+
+  // 2. Firebase 연결 시도 (백그라운드)
+  try{
+    dbRef=db.ref('assetData');
+    db.ref('.info/connected').on('value', snap=>{ fbConnected=snap.val()===true; });
+
+    dbRef.once('value').then(snap=>{
+      let remote=snap.val();
+
+      // 중첩 데이터 자동 수정: assetData 안에 또 assetData가 있으면 꺼내기
+      if(remote && remote.assetData){
+        remote=remote.assetData;
+        // 정리된 데이터로 Firebase 덮어쓰기
+        dbRef.set(JSON.parse(JSON.stringify(remote)));
+      }
+
+      // assets/cards/expenses가 객체({0:{},1:{}})면 배열로 변환
+      function objToArr(val){
+        if(!val) return [];
+        if(Array.isArray(val)) return val;
+        return Object.values(val);
+      }
+      if(remote){
+        remote.assets   = objToArr(remote.assets);
+        remote.cards    = objToArr(remote.cards);
+        remote.expenses = objToArr(remote.expenses);
+        remote.incomes  = objToArr(remote.incomes);
+        remote.cats     = objToArr(remote.cats);
+        if(remote.cards) remote.cards.forEach(c=>{
+          c.fixed  = objToArr(c.fixed);
+          c.usages = objToArr(c.usages);
+        });
+      }
+
+      if(remote && remote.nid){
+        const merged=(localData&&localData.nid>=remote.nid)?localData:remote;
+        S=merged; saveLocal(); setSyncBadge('ok'); fbConnected=true;
+      } else {
+        // Firebase 비어있으면 로컬 데이터 올리기
+        dbRef.set(JSON.parse(JSON.stringify(S))).then(()=>{setSyncBadge('ok');fbConnected=true;});
+      }
+
+      renderDash();
+
+      // 이후 실시간 수신
+      dbRef.on('value', snap2=>{
+        let v=snap2.val();
+        if(!v) return;
+        if(v.assetData) v=v.assetData;
+        function o2a(x){if(!x)return[];if(Array.isArray(x))return x;return Object.values(x);}
+        v.assets=o2a(v.assets);v.cards=o2a(v.cards);v.expenses=o2a(v.expenses);v.incomes=o2a(v.incomes);v.cats=o2a(v.cats);
+        if(v.cards)v.cards.forEach(c=>{c.fixed=o2a(c.fixed);c.usages=o2a(c.usages);});
+        if(v&&v.nid&&v.nid>=S.nid){S=v;saveLocal();renderDash();const at=document.querySelector('.tab.on');if(at){const tabs=['dash','assets','cards','expense','income'];const idx=[...document.querySelectorAll('.tab')].indexOf(at);if(idx>0){const n=tabs[idx];if(n==='assets')renderAssets();if(n==='cards')renderCards();if(n==='expense')renderExpenses();if(n==='income')renderIncome();}}}
+      });
+
+    }).catch(err=>{console.error('Firebase fetch error:',err);setSyncBadge('로컬저장');});
+  }catch(e){console.error('Firebase init error:',e);setSyncBadge('로컬저장');}
+}
 }
 
 const GROUPS=[{key:'jp'},{key:'kr'},{key:'inv'},{key:'fixed'},{key:'debt'}];
