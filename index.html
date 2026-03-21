@@ -479,33 +479,43 @@ function startApp(){
   rDash();
 
   // Firebase 연결
-  fbRef = fbDB.ref('assetData');
+  fbRef = fbDB.ref('/');
   fbRef.once('value').then(snap=>{
     let v=snap.val();
-    // 중첩 처리
+    // assetData 중첩 자동 처리
     if(v && v.assetData) v=v.assetData;
-    if(v && v.nid){
+    if(v && (v.nid || v.assets)){
       // 배열 정규화
       v.assets = o2a(v.assets);
       v.cards  = o2a(v.cards);
-      v.exps   = o2a(v.exps   || v.expenses);
-      v.incs   = o2a(v.incs   || v.incomes);
+      v.exps   = o2a(v.exps || v.expenses || []);
+      v.incs   = o2a(v.incs || v.incomes  || []);
       v.cats   = o2a(v.cats);
+      if(!v.nid) v.nid = 600;
       if(v.cards) v.cards.forEach(c=>{c.fixed=o2a(c.fixed);c.usages=o2a(c.usages);});
-      // amount → amt 필드 정규화
-      v.assets.forEach(a=>{if(a.amount!==undefined&&a.amt===undefined){a.amt=a.amount;delete a.amount;}if(a.currency!==undefined&&a.cur===undefined){a.cur=a.currency;delete a.currency;}});
-      v.exps.forEach(e=>{if(e.amount!==undefined&&e.amt===undefined){e.amt=e.amount;delete e.amount;}if(e.currency!==undefined&&e.cur===undefined){e.cur=e.currency;delete e.currency;}});
-      v.incs.forEach(e=>{if(e.amount!==undefined&&e.amt===undefined){e.amt=e.amount;delete e.amount;}if(e.currency!==undefined&&e.cur===undefined){e.cur=e.currency;delete e.currency;}});
-      v.cards.forEach(c=>{if(c.currency!==undefined&&c.cur===undefined){c.cur=c.currency;delete c.currency;}
-        c.fixed.forEach(f=>{if(f.amount!==undefined&&f.amt===undefined){f.amt=f.amount;delete f.amount;}});
-        c.usages.forEach(u=>{if(u.amount!==undefined&&u.amt===undefined){u.amt=u.amount;delete u.amount;}});
+      // amount → amt, currency → cur 정규화
+      const norm = a => {
+        if(a.amount!==undefined && a.amt===undefined){a.amt=a.amount; delete a.amount;}
+        if(a.currency!==undefined && a.cur===undefined){a.cur=a.currency; delete a.currency;}
+      };
+      v.assets.forEach(norm);
+      v.exps.forEach(norm);
+      v.incs.forEach(norm);
+      v.cards.forEach(c=>{
+        norm(c);
+        c.fixed.forEach(norm);
+        c.usages.forEach(norm);
       });
+      if(!v.rate) v.rate={jk:9.3,uj:150};
       if(!v.rate.jk && v.rate.jpyKrw) v.rate.jk=v.rate.jpyKrw;
       if(!v.rate.uj && v.rate.usdJpy) v.rate.uj=v.rate.usdJpy;
+      if(!v.rate.jk) v.rate.jk=9.3;
+      if(!v.rate.uj) v.rate.uj=150;
 
       S = (S && S.nid >= v.nid) ? S : v;
       lsSave();
-      setBadge('ok');
+      // 정규화된 데이터로 Firebase 덮어쓰기
+      fbRef.set(JSON.parse(JSON.stringify(S))).then(()=>setBadge('ok')).catch(()=>setBadge('off'));
     } else {
       // Firebase 비어있으면 현재 데이터 업로드
       fbRef.set(JSON.parse(JSON.stringify(S))).then(()=>setBadge('ok')).catch(()=>setBadge('off'));
@@ -514,17 +524,23 @@ function startApp(){
     // 실시간 리스닝
     fbRef.on('value', snap2=>{
       let v2=snap2.val(); if(!v2)return;
-      if(v2.assetData)v2=v2.assetData;
-      if(!v2.nid)return;
-      v2.assets=o2a(v2.assets);v2.cards=o2a(v2.cards);
-      v2.exps=o2a(v2.exps||v2.expenses);v2.incs=o2a(v2.incs||v2.incomes);v2.cats=o2a(v2.cats);
-      if(v2.cards)v2.cards.forEach(c=>{c.fixed=o2a(c.fixed);c.usages=o2a(c.usages);});
-      v2.assets.forEach(a=>{if(a.amount!==undefined&&a.amt===undefined){a.amt=a.amount;delete a.amount;}if(a.currency!==undefined&&a.cur===undefined){a.cur=a.currency;delete a.currency;}});
-      v2.exps.forEach(e=>{if(e.amount!==undefined&&e.amt===undefined){e.amt=e.amount;delete e.amount;}if(e.currency!==undefined&&e.cur===undefined){e.cur=e.currency;delete e.currency;}});
-      v2.incs.forEach(e=>{if(e.amount!==undefined&&e.amt===undefined){e.amt=e.amount;delete e.amount;}if(e.currency!==undefined&&e.cur===undefined){e.cur=e.currency;delete e.currency;}});
-      if(!v2.rate.jk&&v2.rate.jpyKrw)v2.rate.jk=v2.rate.jpyKrw;
-      if(!v2.rate.uj&&v2.rate.usdJpy)v2.rate.uj=v2.rate.usdJpy;
-      if(v2.nid>S.nid){S=v2;lsSave();setBadge('ok');rDash();const at=document.querySelector('.tab.on');if(at){const idx=[...document.querySelectorAll('.tab')].indexOf(at);const nm=['dash','assets','cards','expense','income'][idx];if(nm==='assets')rAssets();else if(nm==='cards')rCards();else if(nm==='expense')renderExp();else if(nm==='income')rInc();}}
+      if(v2.assetData) v2=v2.assetData;
+      if(!v2.assets) return;
+      v2.assets=o2a(v2.assets); v2.cards=o2a(v2.cards);
+      v2.exps=o2a(v2.exps||v2.expenses||[]); v2.incs=o2a(v2.incs||v2.incomes||[]); v2.cats=o2a(v2.cats);
+      if(!v2.nid) v2.nid=600;
+      if(v2.cards) v2.cards.forEach(c=>{c.fixed=o2a(c.fixed);c.usages=o2a(c.usages);});
+      const norm2=a=>{if(a.amount!==undefined&&a.amt===undefined){a.amt=a.amount;delete a.amount;}if(a.currency!==undefined&&a.cur===undefined){a.cur=a.currency;delete a.currency;}};
+      v2.assets.forEach(norm2);v2.exps.forEach(norm2);v2.incs.forEach(norm2);
+      v2.cards.forEach(c=>{norm2(c);c.fixed.forEach(norm2);c.usages.forEach(norm2);});
+      if(!v2.rate) v2.rate={jk:9.3,uj:150};
+      if(!v2.rate.jk&&v2.rate.jpyKrw) v2.rate.jk=v2.rate.jpyKrw;
+      if(!v2.rate.uj&&v2.rate.usdJpy) v2.rate.uj=v2.rate.usdJpy;
+      if(v2.nid >= S.nid){S=v2;lsSave();setBadge('ok');rDash();
+        const at=document.querySelector('.tab.on');
+        if(at){const idx=[...document.querySelectorAll('.tab')].indexOf(at);const nm=['dash','assets','cards','expense','income'][idx];
+          if(nm==='assets')rAssets();else if(nm==='cards')rCards();else if(nm==='expense')renderExp();else if(nm==='income')rInc();}
+      }
     });
   }).catch(e=>{console.error(e);setBadge('off');});
 }
