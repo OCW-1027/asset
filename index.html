@@ -124,7 +124,10 @@ body{font-family:sans-serif;background:#f5f5f3;color:#1a1a18;min-height:100vh;fo
 .chip.on{background:#185FA5;color:#fff;border-color:#185FA5;}
 .or-line{display:flex;align-items:center;gap:8px;margin:10px 0;font-size:11px;color:#aaa;}
 .or-line::before,.or-line::after{content:'';flex:1;height:1px;background:#eee;}
-.cat-item{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0f0f0;font-size:12px;}
+.filter-btn{background:#eef0ec;border-color:#ddd;color:#555;}
+.filter-btn.on{background:#185FA5;color:#fff;border-color:#185FA5;}
+.tag-fixed{background:#dbeafe;color:#1d4ed8;}
+.tag-var{background:#fef3c7;color:#92400e;}
 .cat-item:last-child{border:none;}
 .add-row{display:flex;gap:6px;margin-top:10px;}
 .add-row input{flex:1;padding:7px 9px;border:1px solid #ddd;border-radius:8px;font-size:12px;}
@@ -172,28 +175,33 @@ body{font-family:sans-serif;background:#f5f5f3;color:#1a1a18;min-height:100vh;fo
 
   <!-- 대시보드 -->
   <div class="pg on" id="pg-dash">
+    <!-- 순자산 크게 -->
+    <div class="kpi" style="margin-bottom:10px;text-align:center;padding:16px;">
+      <div class="lb">현재 순자산 (JPY 환산)</div>
+      <div class="vl pos" id="d-net" style="font-size:24px;margin:6px 0;">—</div>
+      <div class="sb" id="d-net-w" style="font-size:12px;">—</div>
+    </div>
+    <!-- 지출/수입 예정 -->
     <div class="kpi-grid">
-      <div class="kpi"><div class="lb">순자산 (JPY)</div><div class="vl pos" id="d-net">—</div><div class="sb" id="d-net-w">—</div></div>
-      <div class="kpi"><div class="lb">이달 지출</div><div class="vl neg" id="d-exp">¥0</div><div class="sb" id="d-exp-n">0건</div></div>
-      <div class="kpi"><div class="lb">이달 수입</div><div class="vl pos" id="d-inc">¥0</div><div class="sb">실수령</div></div>
+      <div class="kpi"><div class="lb">지출 예정 합계</div><div class="vl neg" id="d-exp">¥0</div><div class="sb" id="d-exp-n">0건</div></div>
+      <div class="kpi"><div class="lb">수입 예정 합계</div><div class="vl pos" id="d-inc">¥0</div><div class="sb" id="d-inc-n">0건</div></div>
+      <div class="kpi"><div class="lb">수입 - 지출</div><div class="vl" id="d-bal" style="color:#1a1a18;">¥0</div><div class="sb">예상 잔액</div></div>
     </div>
-    <div class="prog-box">
-      <div style="display:flex;justify-content:space-between;font-size:11px;color:#777;">
-        <span>지출/수입 <b id="d-ratio" style="color:#1a1a18;">0%</b></span>
-        <button class="btn btn-s" onclick="openModal('m-rate')">환율 설정</button>
-      </div>
-      <div class="prog-bar"><div class="prog-fill" id="d-bar" style="width:0%"></div></div>
-      <div style="font-size:11px;color:#777;margin-top:4px;">잔액 <b id="d-bal" style="color:#1a1a18;">¥0</b></div>
+    <!-- 카드 -->
+    <div class="g2" style="margin-bottom:10px;">
+      <div class="kpi"><div class="lb">카드 확정 청구</div><div class="vl neg" id="d-cfix">¥0</div><div class="sb">인출 예정</div></div>
+      <div class="kpi"><div class="lb">카드 미확정</div><div class="vl warn" id="d-cunfix">¥0</div><div class="sb">추후 확정</div></div>
     </div>
+    <!-- 환율 -->
     <div class="rate-bar">
       <span>1 JPY = <b id="r-jpy-lbl">9.3</b>원</span>
       <span>1 USD = <b id="r-usd-lbl">150</b>엔</span>
       <span>1 USD = <b id="r-calc-lbl">1,395</b>원</span>
+      <button class="btn btn-s" onclick="openModal('m-rate')" style="margin-left:auto;">환율 설정</button>
     </div>
-    <div class="pc2">
-      <div class="kpi"><div class="lb">카드 확정 청구</div><div class="vl neg" id="d-cfix">¥0</div><div class="sb">인출 예정</div></div>
-      <div class="kpi"><div class="lb">카드 미확정</div><div class="vl warn" id="d-cunfix">¥0</div><div class="sb">추후 확정</div></div>
-    </div>
+    <!-- 고정 지출 요약 -->
+    <div class="stitle">고정 지출 목록</div>
+    <div id="d-fixed-list"></div>
   </div>
 
   <!-- 자산 -->
@@ -233,13 +241,18 @@ body{font-family:sans-serif;background:#f5f5f3;color:#1a1a18;min-height:100vh;fo
   <!-- 지출 -->
   <div class="pg" id="pg-expense">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-      <span style="font-size:14px;font-weight:600;">지출 내역</span>
+      <span style="font-size:14px;font-weight:600;">지출 목록</span>
       <div style="display:flex;gap:6px;">
         <button class="btn btn-s" onclick="openModal('m-cat')">카테고리</button>
         <button class="btn btn-p btn-s" onclick="openExpModal()">+ 추가</button>
       </div>
     </div>
-    <select id="exp-msel" onchange="renderExp()" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:12px;margin-bottom:12px;background:#fff;"></select>
+    <!-- 고정/변동 필터 -->
+    <div style="display:flex;gap:6px;margin-bottom:12px;">
+      <button class="btn btn-s filter-btn on" id="ef-all"   onclick="setExpFilter('all')">전체</button>
+      <button class="btn btn-s filter-btn"    id="ef-fixed" onclick="setExpFilter('fixed')">고정</button>
+      <button class="btn btn-s filter-btn"    id="ef-var"   onclick="setExpFilter('var')">변동</button>
+    </div>
     <div id="exp-list"></div>
     <div class="divider"></div>
     <div id="exp-sum"></div>
@@ -248,13 +261,12 @@ body{font-family:sans-serif;background:#f5f5f3;color:#1a1a18;min-height:100vh;fo
   <!-- 수입 -->
   <div class="pg" id="pg-income">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-      <span style="font-size:14px;font-weight:600;">수입 내역</span>
+      <span style="font-size:14px;font-weight:600;">수입 목록</span>
       <button class="btn btn-p btn-s" onclick="openIncModal()">+ 추가</button>
     </div>
-    <select id="inc-msel" onchange="rInc()" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:12px;margin-bottom:12px;background:#fff;"></select>
     <div id="inc-list"></div>
     <div class="divider"></div>
-    <div class="srow"><span>선택 월 합계</span><span class="pos" id="inc-total">¥0</span></div>
+    <div class="srow"><span>수입 합계</span><span class="pos" id="inc-total">¥0</span></div>
   </div>
 
   <!-- 메모 -->
@@ -280,7 +292,12 @@ body{font-family:sans-serif;background:#f5f5f3;color:#1a1a18;min-height:100vh;fo
   <div class="field"><label>금액</label><input type="number" id="e-amt" placeholder="0"></div>
   <div class="field"><label>통화</label><select id="e-cur"><option value="JPY">JPY (엔)</option><option value="KRW">KRW (원)</option><option value="USD">USD</option></select></div>
   <div class="field"><label>카테고리</label><select id="e-cat"></select></div>
-  <div class="field"><label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="e-rec" style="width:auto;">정기 지출로 등록</label></div>
+  <div class="field"><label>구분</label>
+    <select id="e-rec">
+      <option value="fixed">고정 (매월 발생)</option>
+      <option value="var">변동 (일시적)</option>
+    </select>
+  </div>
   <input type="hidden" id="e-eid">
   <div class="mfoot"><button class="btn" onclick="closeModal('m-exp')">취소</button><button class="btn btn-p" onclick="saveExp()">저장</button></div>
 </div></div>
@@ -703,18 +720,86 @@ function addCat(){const v=$('cat-new').value.trim();if(!v||S.cats.includes(v)){a
 function delCat(i){if(!confirm(`"${S.cats[i]}" 삭제?`))return;S.cats.splice(i,1);fbSave();rCatModal();}
 
 // ── 지출 ──
+function rDash(){
+  if(!S)return;
+  const r=S.rate;
+  const expJ=S.exps.reduce((s,e)=>s+toJ(e.amt,e.cur,r),0);
+  const incJ=S.incs.reduce((s,e)=>s+toJ(e.amt,e.cur,r),0);
+  const fixJ=S.cards.reduce((s,c)=>s+c.fixed.reduce((a,f)=>a+toJ(f.amt,c.cur,r),0),0);
+  const unfJ=S.cards.reduce((s,c)=>s+c.usages.reduce((a,u)=>a+toJ(u.amt,c.cur,r),0),0);
+  const finJ=S.assets.filter(a=>a.type!=='debt'&&a.type!=='fixed').reduce((s,a)=>s+toJ(a.amt,a.cur,r),0);
+  const fixdJ=S.assets.filter(a=>a.type==='fixed').reduce((s,a)=>s+toJ(a.amt,a.cur,r),0);
+  const debtJ=S.assets.filter(a=>a.type==='debt').reduce((s,a)=>s+toJ(a.amt,a.cur,r),0);
+  const net=finJ+fixdJ-debtJ;
+  $('d-net').textContent='¥'+N(net);
+  $('d-net-w').textContent='≈₩'+N(net*r.jk);
+  $('d-exp').textContent='¥'+N(expJ);
+  $('d-exp-n').textContent=S.exps.length+'건';
+  $('d-inc').textContent='¥'+N(incJ);
+  $('d-inc-n').textContent=S.incs.length+'건';
+  const bal=incJ-expJ;
+  $('d-bal').textContent='¥'+N(bal);
+  $('d-bal').className='vl '+(bal>=0?'pos':'neg');
+  $('d-cfix').textContent='¥'+N(fixJ);
+  $('d-cunfix').textContent='¥'+N(unfJ);
+  $('r-jpy-lbl').textContent=r.jk;
+  $('r-usd-lbl').textContent=r.uj+'엔';
+  $('r-calc-lbl').textContent=N(Math.round(r.uj*r.jk))+'원';
+  // 고정 지출 목록
+  const fixed=S.exps.filter(e=>e.rec==='fixed'||e.rec===true);
+  $('d-fixed-list').innerHTML=fixed.length
+    ?fixed.map(e=>`<div class="item"><div class="item-main"><div class="item-name">${e.name}<span class="tag tag-fixed">고정</span></div><div class="item-sub">${e.cat}${e.date?' · '+e.date:''}</div></div><div class="amt neg">${SYM(e.cur)}${N(e.amt)}</div></div>`).join('')
+    :'<div class="empty">고정 지출 없음</div>';
+}
+
+// ── 자산 ──
+function rAssets(){
+  if(!S)return;const r=S.rate;
+  ['jp','kr','inv','fixed','debt'].forEach(type=>{
+    const list=S.assets.filter(a=>a.type===type);
+    $('al-'+type).innerHTML=list.length?list.map(a=>{
+      const isU=a.cur==='USD',isD=type==='debt',isF=type==='fixed';
+      const v=isU?ND(Math.abs(a.amt)):N(Math.abs(a.amt));
+      let sub='';
+      if(isU)sub=`≈¥${N(Math.abs(a.amt)*r.uj)} / ₩${N(Math.abs(a.amt)*r.uj*r.jk)}`;
+      else if(a.cur==='KRW')sub=`≈¥${N(Math.abs(a.amt)/r.jk)}`;
+      else if(Math.abs(a.amt)>0)sub=`≈₩${N(Math.abs(a.amt)*r.jk)}`;
+      if(isF&&a.fkind)sub=(sub?sub+' · ':'')+a.fkind+(a.fmemo?' · '+a.fmemo:'');
+      return`<div class="item"><div class="item-main"><div class="item-name">${a.name}<span class="tag ${isU?'t-usd':a.cur==='KRW'?'t-g':'t-b'}">${a.cur}</span>${isF&&a.fkind?`<span class="tag t-gray">${a.fkind}</span>`:''}</div>${sub?`<div class="item-sub">${sub}</div>`:''}</div><div class="item-r"><div class="amt ${isD?'neg':isF?'muted':a.amt<0?'neg':'pos'}">${isD?'-':''}${SYM(a.cur)}${v}</div><button class="btn btn-s" onclick="editAsset(${a.id})">수정</button><button class="btn btn-s btn-d" onclick="delAsset(${a.id})">삭제</button></div></div>`;
+    }).join(''):'<div class="empty">없음</div>';
+  });
+  const finJ=S.assets.filter(a=>a.type!=='debt'&&a.type!=='fixed').reduce((s,a)=>s+toJ(a.amt,a.cur,S.rate),0);
+  const fixdJ=S.assets.filter(a=>a.type==='fixed').reduce((s,a)=>s+toJ(a.amt,a.cur,S.rate),0);
+  const debtJ=S.assets.filter(a=>a.type==='debt').reduce((s,a)=>s+toJ(a.amt,a.cur,S.rate),0);
+  const net=finJ+fixdJ-debtJ;
+  $('s-fin').textContent='¥'+N(finJ);$('s-fixd').textContent='¥'+N(fixdJ);$('s-debt').textContent='¥'+N(debtJ);
+  $('s-net-j').textContent='¥'+N(net);$('s-net-k').textContent='₩'+N(net*S.rate.jk);
+}
+
+// ── 지출 필터 ──
+let expFilter='all';
+function setExpFilter(f){
+  expFilter=f;
+  ['all','fixed','var'].forEach(x=>$('ef-'+x).classList.toggle('on',x===f));
+  renderExp();
+}
+
 function buildChips(){
   if(!S)return;
-  const items=S.exps.filter(e=>e.rec);
-  $('rec-chips').innerHTML=items.length?items.map(e=>`<div class="chip" data-id="${e.id}" onclick="selChip(${e.id})">${e.name}<br><span style="font-size:9px;opacity:.7;">${SYM(e.cur)}${N(e.amt)}</span></div>`).join(''):'<span style="font-size:11px;color:#aaa;">정기 항목 없음</span>';
+  const items=S.exps.filter(e=>e.rec==='fixed'||e.rec===true);
+  $('rec-chips').innerHTML=items.length
+    ?items.map(e=>`<div class="chip" data-id="${e.id}" onclick="selChip(${e.id})">${e.name}<br><span style="font-size:9px;opacity:.7;">${SYM(e.cur)}${N(e.amt)}</span></div>`).join('')
+    :'<span style="font-size:11px;color:#aaa;">고정 항목 없음</span>';
 }
 function selChip(id){
   const chips=document.querySelectorAll('.chip'),t=document.querySelector(`.chip[data-id="${id}"]`);
   const sel=t.classList.contains('on');chips.forEach(c=>c.classList.remove('on'));
-  if(sel){$('e-name').value='';$('e-amt').value='';$('e-cur').value='JPY';$('e-rec').checked=false;buildCats('e-cat','');return;}
+  if(sel){$('e-name').value='';$('e-amt').value='';$('e-cur').value='JPY';$('e-rec').value='fixed';buildCats('e-cat','');return;}
   t.classList.add('on');
   const e=S.exps.find(x=>x.id===id);if(!e)return;
-  $('e-name').value=e.name;$('e-amt').value=e.amt;$('e-cur').value=e.cur;$('e-rec').checked=true;buildCats('e-cat',e.cat);
+  $('e-name').value=e.name;$('e-amt').value=e.amt;$('e-cur').value=e.cur;
+  $('e-rec').value=(e.rec==='fixed'||e.rec===true)?'fixed':'var';
+  buildCats('e-cat',e.cat);
 }
 function openExpModal(editId){
   if(editId){
@@ -722,22 +807,23 @@ function openExpModal(editId){
     $('exp-modal-title').textContent='지출 수정';
     $('exp-chip-label').style.display='none';$('rec-chips').style.display='none';
     document.querySelector('#m-exp .or-line').style.display='none';
-    $('e-date').value=e.date;$('e-name').value=e.name;$('e-amt').value=e.amt;
-    $('e-cur').value=e.cur;$('e-rec').checked=!!e.rec;$('e-eid').value=editId;
-    buildCats('e-cat',e.cat);
+    $('e-date').value=e.date||'';$('e-name').value=e.name;$('e-amt').value=e.amt;
+    $('e-cur').value=e.cur;$('e-rec').value=(e.rec==='fixed'||e.rec===true)?'fixed':'var';
+    $('e-eid').value=editId;buildCats('e-cat',e.cat);
   } else {
     $('exp-modal-title').textContent='지출 추가';
     $('exp-chip-label').style.display='';$('rec-chips').style.display='';
     document.querySelector('#m-exp .or-line').style.display='';
     $('e-date').value=td();$('e-name').value='';$('e-amt').value='';
-    $('e-cur').value='JPY';$('e-rec').checked=false;$('e-eid').value='';
+    $('e-cur').value='JPY';$('e-rec').value='fixed';$('e-eid').value='';
     buildCats('e-cat','');buildChips();
   }
   openModal('m-exp');
 }
 function saveExp(){
   const eid=parseInt($('e-eid').value);
-  const d={date:$('e-date').value,name:$('e-name').value.trim(),amt:parseFloat($('e-amt').value)||0,cur:$('e-cur').value,cat:$('e-cat').value,rec:$('e-rec').checked};
+  const recVal=$('e-rec').value; // 'fixed' or 'var'
+  const d={date:$('e-date').value,name:$('e-name').value.trim(),amt:parseFloat($('e-amt').value)||0,cur:$('e-cur').value,cat:$('e-cat').value,rec:recVal};
   if(!d.name||!d.amt){alert('항목명과 금액을 입력하세요.');return;}
   if(eid){const i=S.exps.findIndex(e=>e.id===eid);if(i>=0)S.exps[i]={...S.exps[i],...d};}
   else S.exps.push({id:S.nid++,...d});
@@ -745,17 +831,24 @@ function saveExp(){
 }
 function renderExp(){
   if(!S)return;
-  const sel=$('exp-msel');
-  const months=[...new Set(S.exps.map(e=>ym(e.date)))].sort().reverse();
-  const cm=mth();if(!months.includes(cm))months.unshift(cm);
-  const prev=sel.value||cm;
-  sel.innerHTML=months.map(m=>`<option value="${m}"${m===prev?' selected':''}>${m}</option>`).join('');
-  const m=sel.value||cm,r=S.rate;
-  const list=S.exps.filter(e=>ym(e.date)===m).sort((a,b)=>b.date.localeCompare(a.date));
-  $('exp-list').innerHTML=list.map(e=>`<div class="item"><div class="item-main"><div class="item-name">${e.name}${e.rec?'<span class="tag t-b">정기</span>':''}</div><div class="item-sub">${e.date} · ${e.cat} · ≈¥${N(toJ(e.amt,e.cur,r))}</div></div><div class="item-r"><div class="amt neg">${SYM(e.cur)}${N(e.amt)}</div><button class="btn btn-s" onclick="openExpModal(${e.id})">수정</button><button class="btn btn-s btn-d" onclick="delExp(${e.id})">삭제</button></div></div>`).join('')||'<div class="empty">없음</div>';
+  const r=S.rate;
+  let list=[...S.exps].sort((a,b)=>{
+    // 고정 먼저, 그 다음 날짜 내림차순
+    const af=(a.rec==='fixed'||a.rec===true)?0:1;
+    const bf=(b.rec==='fixed'||b.rec===true)?0:1;
+    if(af!==bf)return af-bf;
+    return (b.date||'').localeCompare(a.date||'');
+  });
+  if(expFilter==='fixed') list=list.filter(e=>e.rec==='fixed'||e.rec===true);
+  else if(expFilter==='var') list=list.filter(e=>e.rec!=='fixed'&&e.rec!==true);
+  $('exp-list').innerHTML=list.map(e=>{
+    const isFixed=e.rec==='fixed'||e.rec===true;
+    return`<div class="item"><div class="item-main"><div class="item-name">${e.name}<span class="tag ${isFixed?'tag-fixed':'tag-var'}">${isFixed?'고정':'변동'}</span></div><div class="item-sub">${e.date?' '+e.date+' ·':''} ${e.cat} · ≈¥${N(toJ(e.amt,e.cur,r))}</div></div><div class="item-r"><div class="amt neg">${SYM(e.cur)}${N(e.amt)}</div><button class="btn btn-s" onclick="openExpModal(${e.id})">수정</button><button class="btn btn-s btn-d" onclick="delExp(${e.id})">삭제</button></div></div>`;
+  }).join('')||'<div class="empty">없음</div>';
   const totJ=list.reduce((s,e)=>s+toJ(e.amt,e.cur,r),0);
   const cats=[...new Set(list.map(e=>e.cat))];
-  $('exp-sum').innerHTML=cats.map(c=>{const s=list.filter(e=>e.cat===c).reduce((a,e)=>a+toJ(e.amt,e.cur,r),0);return`<div class="srow"><span>${c}</span><span>¥${N(s)}</span></div>`;}).join('')+`<div class="srow"><span>합계</span><span class="neg">¥${N(totJ)} (₩${N(totJ*r.jk)})</span></div>`;
+  $('exp-sum').innerHTML=cats.map(c=>{const s=list.filter(e=>e.cat===c).reduce((a,e)=>a+toJ(e.amt,e.cur,r),0);return`<div class="srow"><span>${c}</span><span>¥${N(s)}</span></div>`;}).join('')
+    +`<div class="srow"><span>합계 (${expFilter==='all'?'전체':expFilter==='fixed'?'고정':'변동'})</span><span class="neg">¥${N(totJ)} (₩${N(totJ*r.jk)})</span></div>`;
 }
 function delExp(id){if(!confirm('삭제?'))return;S.exps=S.exps.filter(e=>e.id!==id);fbSave();renderExp();rDash();}
 
@@ -781,13 +874,7 @@ function saveInc(){
 }
 function rInc(){
   if(!S)return;const r=S.rate;
-  const sel=$('inc-msel');
-  const months=[...new Set(S.incs.map(e=>ym(e.date)))].sort().reverse();
-  const cm=mth();if(!months.includes(cm))months.unshift(cm);
-  const prev=sel.value||cm;
-  sel.innerHTML=months.map(m=>`<option value="${m}"${m===prev?' selected':''}>${m}</option>`).join('');
-  const m=sel.value||cm;
-  const list=S.incs.filter(e=>ym(e.date)===m).sort((a,b)=>b.date.localeCompare(a.date));
+  const list=[...S.incs].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   $('inc-list').innerHTML=list.map(e=>`<div class="item"><div class="item-main"><div class="item-name">${e.name}</div><div class="item-sub">${e.date} · ≈¥${N(toJ(e.amt,e.cur,r))}</div></div><div class="item-r"><div class="amt pos">${SYM(e.cur)}${N(e.amt)}</div><button class="btn btn-s" onclick="openIncModal(${e.id})">수정</button><button class="btn btn-s btn-d" onclick="delInc(${e.id})">삭제</button></div></div>`).join('')||'<div class="empty">없음</div>';
   const t=list.reduce((s,e)=>s+toJ(e.amt,e.cur,r),0);
   $('inc-total').textContent='¥'+N(t)+' (₩'+N(t*r.jk)+')';
