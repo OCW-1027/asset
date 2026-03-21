@@ -176,6 +176,7 @@ body{font-family:sans-serif;background:#f5f5f3;color:#1a1a18;min-height:100vh;fo
     <div class="tab" onclick="go('expense')">지출</div>
     <div class="tab" onclick="go('income')">수입</div>
     <div class="tab" onclick="go('memo')">메모</div>
+    <div class="tab" onclick="go('backup')">백업</div>
   </div>
   <div class="wrap">
 
@@ -284,8 +285,41 @@ body{font-family:sans-serif;background:#f5f5f3;color:#1a1a18;min-height:100vh;fo
     <div id="memo-list"></div>
   </div>
 
+  <!-- 백업 -->
+  <div class="pg" id="pg-backup">
+    <span style="font-size:14px;font-weight:600;">백업 / 복원</span>
+    <div style="margin-top:14px;">
+      <div class="stitle">📥 JSON 백업 · 복원</div>
+      <div style="background:#fff;border:1px solid #eee;border-radius:10px;padding:14px;margin-bottom:8px;">
+        <div style="font-size:12px;color:#555;margin-bottom:12px;line-height:1.6;">모든 데이터(자산·카드·지출·수입·메모)를 JSON 파일로 백업하거나 복원합니다. 중요한 변경 전에 백업을 권장합니다.</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-p" onclick="backupJSON()">⬇ JSON 백업 다운로드</button>
+          <label class="btn" style="cursor:pointer;">📂 JSON 복원 (파일 선택)<input type="file" id="restore-file" accept=".json" style="display:none;" onchange="restoreJSON(this)"></label>
+        </div>
+      </div>
+      <div class="stitle">🖨 PDF 출력</div>
+      <div style="background:#fff;border:1px solid #eee;border-radius:10px;padding:14px;margin-bottom:8px;">
+        <div style="font-size:12px;color:#555;margin-bottom:12px;line-height:1.6;">현재 자산 현황을 PDF로 출력합니다. 브라우저의 인쇄 기능을 활용합니다.</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-p" onclick="printPDF('all')">🖨 전체 현황 PDF</button>
+          <button class="btn" onclick="printPDF('assets')">자산만</button>
+          <button class="btn" onclick="printPDF('expense')">지출만</button>
+          <button class="btn" onclick="printPDF('income')">수입만</button>
+        </div>
+      </div>
+      <div class="stitle">ℹ 백업 정보</div>
+      <div style="background:#fff;border:1px solid #eee;border-radius:10px;padding:14px;">
+        <div id="backup-info" style="font-size:12px;color:#555;line-height:1.8;"></div>
+      </div>
+    </div>
+  </div>
+
   </div><!-- end .wrap -->
 </div>
+
+<!-- 인쇄용 스타일 -->
+<style id="print-style"></style>
+<div id="print-area" style="display:none;"></div>
 
 <!-- ── 모달: 지출 추가/수정 ── -->
 <div class="modal-bg" id="m-exp"><div class="modal">
@@ -556,11 +590,12 @@ function rAll(){
 
 // ── 탭 ──
 function go(name){
-  document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('on',['dash','assets','cards','expense','income','memo'][i]===name));
+  document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('on',['dash','assets','cards','expense','income','memo','backup'][i]===name));
   document.querySelectorAll('.pg').forEach(el=>el.classList.remove('on'));
   $('pg-'+name).classList.add('on');
   if(name==='dash')rDash();else if(name==='assets')rAssets();else if(name==='cards')rCards();
   else if(name==='expense')renderExp();else if(name==='income')rInc();else if(name==='memo')rMemo();
+  else if(name==='backup')rBackupInfo();
 }
 
 // ── 대시보드 ──
@@ -737,11 +772,16 @@ function rDash(){
 }
 
 // ── 자산 ──
+// 자산 섹션별 Sortable 인스턴스 관리
+const assetSortables={};
 function rAssets(){
   if(!S)return;const r=S.rate;
   ['jp','kr','inv','fixed','debt'].forEach(type=>{
     const list=S.assets.filter(a=>a.type===type);
-    $('al-'+type).innerHTML=list.length?list.map(a=>{
+    const el=$('al-'+type);
+    // 기존 Sortable 제거
+    if(assetSortables[type]){assetSortables[type].destroy();delete assetSortables[type];}
+    el.innerHTML=list.length?list.map(a=>{
       const isU=a.cur==='USD',isD=type==='debt',isF=type==='fixed';
       const isNeg=a.amt<0;
       const v=isU?ND(Math.abs(a.amt)):N(Math.abs(a.amt));
@@ -752,8 +792,21 @@ function rAssets(){
       if(isF&&a.fkind)sub=(sub?sub+' · ':'')+a.fkind+(a.fmemo?' · '+a.fmemo:'');
       const colorClass=isD?'neg':isNeg?'neg':isF?'muted':'pos';
       const prefix=isNeg||isD?'-':'';
-      return`<div class="item"><div class="item-main"><div class="item-name">${a.name}<span class="tag ${isU?'t-usd':a.cur==='KRW'?'t-g':'t-b'}">${a.cur}</span>${isF&&a.fkind?`<span class="tag t-gray">${a.fkind}</span>`:''}</div>${sub?`<div class="item-sub">${sub}</div>`:''}</div><div class="item-r"><div class="amt ${colorClass}">${prefix}${SYM(a.cur)}${v}</div><button class="btn btn-s" onclick="editAsset(${a.id})">수정</button><button class="btn btn-s btn-d" onclick="delAsset(${a.id})">삭제</button></div></div>`;
+      return`<div class="item" data-id="${a.id}"><span class="drag-handle">⠿</span><div class="item-main"><div class="item-name">${a.name}<span class="tag ${isU?'t-usd':a.cur==='KRW'?'t-g':'t-b'}">${a.cur}</span>${isF&&a.fkind?`<span class="tag t-gray">${a.fkind}</span>`:''}</div>${sub?`<div class="item-sub">${sub}</div>`:''}</div><div class="item-r"><div class="amt ${colorClass}">${prefix}${SYM(a.cur)}${v}</div><button class="btn btn-s" onclick="editAsset(${a.id})">수정</button><button class="btn btn-s btn-d" onclick="delAsset(${a.id})">삭제</button></div></div>`;
     }).join(''):'<div class="empty">없음</div>';
+    if(list.length>1){
+      assetSortables[type]=Sortable.create(el,{
+        handle:'.drag-handle',animation:150,
+        onEnd:function(){
+          const ids=[...el.querySelectorAll('.item[data-id]')].map(x=>parseInt(x.dataset.id));
+          const others=S.assets.filter(a=>a.type!==type);
+          const thisGroup=S.assets.filter(a=>a.type===type);
+          const reordered=ids.map(id=>thisGroup.find(a=>a.id===id)).filter(Boolean);
+          S.assets=[...others,...reordered];
+          fbSave();
+        }
+      });
+    }
   });
   const finJ=S.assets.filter(a=>a.type!=='debt'&&a.type!=='fixed').reduce((s,a)=>s+toJ(a.amt,a.cur,S.rate),0);
   const fixdJ=S.assets.filter(a=>a.type==='fixed').reduce((s,a)=>s+toJ(a.amt,a.cur,S.rate),0);
@@ -904,13 +957,138 @@ function saveMemo(){
   else S.memos.push({id:S.nid++,...d});
   fbSave();closeModal('m-memo');rMemo();
 }
+let memoSortable=null;
 function rMemo(){
   if(!S)return;
-  $('memo-list').innerHTML=S.memos.length
-    ?[...S.memos].reverse().map(m=>`<div class="memo-card"><div class="memo-top"><div class="memo-title">${m.title}</div><div style="display:flex;gap:5px;"><button class="btn btn-s" onclick="openMemoModal(${m.id})">수정</button><button class="btn btn-s btn-d" onclick="delMemo(${m.id})">삭제</button></div></div><div class="memo-body">${m.body}</div><div class="memo-date">${m.date}</div></div>`).join('')
+  const el=$('memo-list');
+  if(memoSortable){memoSortable.destroy();memoSortable=null;}
+  el.innerHTML=S.memos.length
+    ?S.memos.map(m=>`<div class="memo-card" data-id="${m.id}"><div class="memo-top"><div style="display:flex;align-items:center;gap:6px;"><span class="drag-handle" style="font-size:18px;">⠿</span><div class="memo-title">${m.title}</div></div><div style="display:flex;gap:5px;"><button class="btn btn-s" onclick="openMemoModal(${m.id})">수정</button><button class="btn btn-s btn-d" onclick="delMemo(${m.id})">삭제</button></div></div><div class="memo-body">${m.body}</div><div class="memo-date">${m.date}</div></div>`).join('')
     :'<div class="empty">메모가 없습니다. [+ 추가] 버튼을 눌러 메모를 작성하세요.</div>';
+  if(S.memos.length>1){
+    memoSortable=Sortable.create(el,{
+      handle:'.drag-handle',animation:150,
+      onEnd:function(){
+        const ids=[...el.querySelectorAll('.memo-card[data-id]')].map(x=>parseInt(x.dataset.id));
+        S.memos=ids.map(id=>S.memos.find(m=>m.id===id)).filter(Boolean);
+        fbSave();
+      }
+    });
+  }
 }
 function delMemo(id){if(!confirm('삭제?'))return;S.memos=S.memos.filter(m=>m.id!==id);fbSave();rMemo();}
+
+// ── 백업 정보 ──
+function rBackupInfo(){
+  if(!S)return;
+  $('backup-info').innerHTML=`
+    <div>📊 자산 항목: <b>${S.assets.length}개</b></div>
+    <div>💳 카드: <b>${S.cards.length}개</b></div>
+    <div>💸 지출 항목: <b>${S.exps.length}개</b></div>
+    <div>💰 수입 항목: <b>${S.incs.length}개</b></div>
+    <div>📝 메모: <b>${S.memos.length}개</b></div>
+    <div style="margin-top:8px;color:#aaa;">마지막 nid: ${S.nid}</div>
+  `;
+}
+
+// ── JSON 백업 ──
+function backupJSON(){
+  if(!S)return;
+  const data=JSON.stringify(S,null,2);
+  const blob=new Blob([data],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  const dateStr=new Date().toISOString().slice(0,10);
+  a.href=url;a.download=`자산관리_백업_${dateStr}.json`;a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── JSON 복원 ──
+function restoreJSON(input){
+  const file=input.files[0];if(!file)return;
+  if(!confirm('현재 데이터를 백업 파일로 덮어씁니다.\n계속하시겠습니까?')){input.value='';return;}
+  const reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      const v=JSON.parse(e.target.result);
+      if(!v.assets||!v.rate){alert('올바른 백업 파일이 아닙니다.');return;}
+      // 필드 정규화
+      const fn=a=>{
+        if(a.amount!==undefined&&a.amt===undefined){a.amt=a.amount;delete a.amount;}
+        if(a.currency!==undefined&&a.cur===undefined){a.cur=a.currency;delete a.currency;}
+      };
+      v.assets=o2a(v.assets);v.cards=o2a(v.cards);
+      v.exps=o2a(v.exps||v.expenses||[]);v.incs=o2a(v.incs||v.incomes||[]);
+      v.cats=o2a(v.cats);v.memos=o2a(v.memos||[]);
+      v.assets.forEach(fn);v.exps.forEach(fn);v.incs.forEach(fn);
+      v.cards.forEach(c=>{c.fixed=o2a(c.fixed);c.usages=o2a(c.usages);fn(c);c.fixed.forEach(fn);c.usages.forEach(fn);});
+      if(!v.rate.jk&&v.rate.jpyKrw)v.rate.jk=v.rate.jpyKrw;
+      if(!v.rate.uj&&v.rate.usdJpy)v.rate.uj=v.rate.usdJpy;
+      S=v;fbSave();rDash();rBackupInfo();
+      alert('복원 완료!');
+    }catch(err){alert('파일 읽기 오류: '+err.message);}
+    input.value='';
+  };
+  reader.readAsText(file);
+}
+
+// ── PDF 출력 ──
+function printPDF(section){
+  if(!S)return;
+  const r=S.rate;
+  const toJpy=(a,c)=>toJ(a,c,r);
+
+  let html='<style>body{font-family:sans-serif;font-size:12px;color:#1a1a18;padding:20px;}h1{font-size:18px;margin-bottom:4px;}h2{font-size:13px;margin:16px 0 6px;border-bottom:1px solid #eee;padding-bottom:4px;color:#185FA5;}table{width:100%;border-collapse:collapse;margin-bottom:10px;}th{background:#eef0ec;padding:6px 8px;text-align:left;font-size:11px;}td{padding:5px 8px;border-bottom:1px solid #f0f0f0;font-size:11px;}.neg{color:#c0392b;}.pos{color:#1a7a40;}.sum{font-weight:600;background:#f5f5f3;}.date{font-size:10px;color:#888;text-align:right;margin-bottom:16px;}</style>';
+  const dateStr=new Date().toLocaleString('ko-KR');
+  html+=`<h1>자산 관리 현황</h1><div class="date">출력일시: ${dateStr}</div>`;
+
+  if(section==='all'||section==='assets'){
+    html+=`<h2>📊 자산 현황</h2>`;
+    const groups=[['jp','일본 금융'],['kr','한국 금융'],['inv','주식/투자'],['fixed','고정자산'],['debt','부채']];
+    groups.forEach(([type,label])=>{
+      const list=S.assets.filter(a=>a.type===type);
+      if(!list.length)return;
+      html+=`<h2 style="font-size:12px;">${label}</h2><table><tr><th>자산명</th><th>통화</th><th>금액</th><th>JPY 환산</th></tr>`;
+      list.forEach(a=>{
+        const jpy=toJpy(a.amt,a.cur);
+        const isNeg=a.amt<0||type==='debt';
+        html+=`<tr><td>${a.name}</td><td>${a.cur}</td><td class="${isNeg?'neg':''}">${isNeg?'-':''}${a.cur==='USD'?ND(Math.abs(a.amt)):N(Math.abs(a.amt))}</td><td class="${isNeg?'neg':''}">${isNeg?'-':''}¥${N(Math.abs(jpy))}</td></tr>`;
+      });
+      html+='</table>';
+    });
+    const finJ=S.assets.filter(a=>a.type!=='debt'&&a.type!=='fixed').reduce((s,a)=>s+toJpy(a.amt,a.cur),0);
+    const debtJ=S.assets.filter(a=>a.type==='debt').reduce((s,a)=>s+toJpy(a.amt,a.cur),0);
+    const fixdJ=S.assets.filter(a=>a.type==='fixed').reduce((s,a)=>s+toJpy(a.amt,a.cur),0);
+    const net=finJ+fixdJ-debtJ;
+    html+=`<table><tr class="sum"><td>순자산 합계</td><td></td><td></td><td class="${net>=0?'pos':'neg'}">¥${N(net)} (₩${N(net*r.jk)})</td></tr></table>`;
+  }
+
+  if(section==='all'||section==='expense'){
+    html+=`<h2>💸 지출 목록 (전체 ${S.exps.length}건)</h2><table><tr><th>항목명</th><th>구분</th><th>카테고리</th><th>날짜</th><th>금액</th><th>≈JPY</th></tr>`;
+    S.exps.forEach(e=>{
+      const isFixed=e.rec==='fixed'||e.rec===true;
+      html+=`<tr><td>${e.name}</td><td>${isFixed?'고정':'변동'}</td><td>${e.cat}</td><td>${e.date||'-'}</td><td class="neg">${N(e.amt)} ${e.cur}</td><td class="neg">¥${N(toJpy(e.amt,e.cur))}</td></tr>`;
+    });
+    const tot=S.exps.reduce((s,e)=>s+toJpy(e.amt,e.cur),0);
+    html+=`<tr class="sum"><td colspan="5">합계</td><td class="neg">¥${N(tot)} (₩${N(tot*r.jk)})</td></tr></table>`;
+  }
+
+  if(section==='all'||section==='income'){
+    html+=`<h2>💰 수입 목록 (전체 ${S.incs.length}건)</h2><table><tr><th>항목명</th><th>날짜</th><th>금액</th><th>≈JPY</th></tr>`;
+    S.incs.forEach(e=>{
+      html+=`<tr><td>${e.name}</td><td>${e.date||'-'}</td><td class="pos">${N(e.amt)} ${e.cur}</td><td class="pos">¥${N(toJpy(e.amt,e.cur))}</td></tr>`;
+    });
+    const tot=S.incs.reduce((s,e)=>s+toJpy(e.amt,e.cur),0);
+    html+=`<tr class="sum"><td colspan="3">합계</td><td class="pos">¥${N(tot)} (₩${N(tot*r.jk)})</td></tr></table>`;
+  }
+
+  // 새 창에서 인쇄
+  const w=window.open('','_blank');
+  w.document.write('<!DOCTYPE html><html><body>'+html+'</body></html>');
+  w.document.close();
+  w.focus();
+  setTimeout(()=>w.print(),500);
+}
 
 // ── 환율 ──
 $('r-ujpy').addEventListener('input',()=>{const j=parseFloat($('r-ujpy').value)||0,k=parseFloat($('r-jpy').value)||(S?S.rate.jk:9.3);$('r-ukrw').value=j>0?N(Math.round(j*k))+'원':'—';});
