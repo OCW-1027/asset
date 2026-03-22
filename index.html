@@ -202,8 +202,8 @@ body{font-family:sans-serif;background:#f5f5f3;color:#1a1a18;min-height:100vh;fo
     <!-- 환율 -->
     <div class="rate-bar">
       <span>1 JPY = <b id="r-jpy-lbl">9.3</b>원</span>
-      <span>1 USD = <b id="r-usd-lbl">150</b>엔</span>
-      <span>1 USD = <b id="r-calc-lbl">1,395</b>원</span>
+      <span>1 USD = <b id="r-usd-lbl">150엔</b></span>
+      <span>1 USD = <b id="r-calc-lbl">1,395원</b></span>
       <button class="btn btn-s" onclick="openModal('m-rate')" style="margin-left:auto;">환율 설정</button>
     </div>
     <!-- 고정 지출 요약 -->
@@ -616,7 +616,7 @@ function rDash(){
   $('d-exp').textContent='¥'+N(expJ);$('d-exp-n').textContent=exps.length+'건';
   $('d-inc').textContent='¥'+N(incJ);
   $('d-cfix').textContent='¥'+N(fixJ);$('d-cunfix').textContent='¥'+N(unfJ);
-  $('r-jpy-lbl').textContent=r.jk;$('r-usd-lbl').textContent=r.uj+'엔';
+  $('r-jpy-lbl').textContent=r.jk+'원';$('r-usd-lbl').textContent=r.uj+'엔';
   $('r-calc-lbl').textContent=N(Math.round(r.uj*r.jk))+'원';
   const ratio=incJ>0?Math.min(Math.round(expJ/incJ*100),999):0;
   $('d-ratio').textContent=ratio+'%';
@@ -761,7 +761,7 @@ function rDash(){
   $('d-bal').className='vl '+(bal>=0?'pos':'neg');
   $('d-cfix').textContent='¥'+N(fixJ);
   $('d-cunfix').textContent='¥'+N(unfJ);
-  $('r-jpy-lbl').textContent=r.jk;
+  $('r-jpy-lbl').textContent=r.jk+'원';
   $('r-usd-lbl').textContent=r.uj+'엔';
   $('r-calc-lbl').textContent=N(Math.round(r.uj*r.jk))+'원';
   // 고정 지출 목록
@@ -1089,6 +1089,36 @@ function printPDF(section){
   w.focus();
   setTimeout(()=>w.print(),500);
 }
+
+// ── 스와이프 탭 전환 ──
+(function(){
+  const TABS=['dash','assets','cards','expense','income','memo','backup'];
+  let tx=0,ty=0,swiping=false;
+  const wrap=document.querySelector('.wrap');
+  wrap.addEventListener('touchstart',e=>{
+    // 드래그 핸들 위에서는 스와이프 비활성화
+    if(e.target.classList.contains('drag-handle'))return;
+    tx=e.touches[0].clientX;ty=e.touches[0].clientY;swiping=true;
+  },{passive:true});
+  wrap.addEventListener('touchmove',e=>{
+    if(!swiping)return;
+    const dx=e.touches[0].clientX-tx;
+    const dy=e.touches[0].clientY-ty;
+    // 세로 스크롤이 더 크면 스와이프 취소
+    if(Math.abs(dy)>Math.abs(dx)){swiping=false;}
+  },{passive:true});
+  wrap.addEventListener('touchend',e=>{
+    if(!swiping)return;
+    const dx=e.changedTouches[0].clientX-tx;
+    const dy=e.changedTouches[0].clientY-ty;
+    swiping=false;
+    if(Math.abs(dx)<60||Math.abs(dy)>Math.abs(dx)*0.8)return; // 최소 60px, 세로 이동이 크면 무시
+    const cur=document.querySelector('.tab.on');
+    const idx=[...document.querySelectorAll('.tab')].indexOf(cur);
+    if(dx<0&&idx<TABS.length-1) go(TABS[idx+1]); // 왼쪽 → 다음 탭
+    if(dx>0&&idx>0)             go(TABS[idx-1]); // 오른쪽 → 이전 탭
+  },{passive:true});
+})();
 
 // ── 환율 ──
 $('r-ujpy').addEventListener('input',()=>{const j=parseFloat($('r-ujpy').value)||0,k=parseFloat($('r-jpy').value)||(S?S.rate.jk:9.3);$('r-ukrw').value=j>0?N(Math.round(j*k))+'원':'—';});
