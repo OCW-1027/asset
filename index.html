@@ -182,23 +182,57 @@ body{font-family:sans-serif;background:#f5f5f3;color:#1a1a18;min-height:100vh;fo
 
   <!-- 대시보드 -->
   <div class="pg on" id="pg-dash">
-    <!-- 순자산 크게 -->
-    <div class="kpi" style="margin-bottom:10px;text-align:center;padding:16px;">
-      <div class="lb">현재 순자산 (JPY 환산)</div>
-      <div class="vl pos" id="d-net" style="font-size:24px;margin:6px 0;">—</div>
-      <div class="sb" id="d-net-w" style="font-size:12px;">—</div>
+    <!-- 순자산 + 전일/전달 비교 -->
+    <div class="kpi" style="margin-bottom:10px;padding:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <div>
+          <div class="lb">현재 순자산 (JPY 환산)</div>
+          <div class="vl pos" id="d-net" style="font-size:24px;margin:6px 0;">—</div>
+          <div class="sb" id="d-net-w" style="font-size:12px;">—</div>
+        </div>
+        <div style="text-align:right;font-size:11px;">
+          <div style="color:#888;margin-bottom:4px;">전일 대비 <span id="d-vs-day" style="font-weight:600;">—</span></div>
+          <div style="color:#888;">전달 대비 <span id="d-vs-month" style="font-weight:600;">—</span></div>
+        </div>
+      </div>
     </div>
+
+    <!-- 도넛 차트 2개 -->
+    <div class="pc2" style="margin-bottom:10px;">
+      <div style="background:#fff;border:1px solid #eee;border-radius:10px;padding:14px;">
+        <div style="font-size:11px;font-weight:600;color:#888;margin-bottom:8px;">자산 구성</div>
+        <canvas id="chart-asset" height="180"></canvas>
+        <div id="chart-asset-legend" style="margin-top:8px;font-size:10px;"></div>
+      </div>
+      <div style="background:#fff;border:1px solid #eee;border-radius:10px;padding:14px;">
+        <div style="font-size:11px;font-weight:600;color:#888;margin-bottom:8px;">부채 구성</div>
+        <canvas id="chart-debt" height="180"></canvas>
+        <div id="chart-debt-legend" style="margin-top:8px;font-size:10px;"></div>
+      </div>
+    </div>
+
+    <!-- 순자산 히스토리 차트 -->
+    <div style="background:#fff;border:1px solid #eee;border-radius:10px;padding:14px;margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div style="font-size:11px;font-weight:600;color:#888;">순자산 추이</div>
+        <div style="font-size:10px;color:#aaa;">자산 수정 시 자동 기록</div>
+      </div>
+      <canvas id="chart-history" height="120"></canvas>
+    </div>
+
     <!-- 지출/수입 예정 -->
-    <div class="kpi-grid">
+    <div class="kpi-grid" style="margin-bottom:10px;">
       <div class="kpi"><div class="lb">지출 예정 합계</div><div class="vl neg" id="d-exp">¥0</div><div class="sb" id="d-exp-n">0건</div></div>
       <div class="kpi"><div class="lb">수입 예정 합계</div><div class="vl pos" id="d-inc">¥0</div><div class="sb" id="d-inc-n">0건</div></div>
       <div class="kpi"><div class="lb">수입 - 지출</div><div class="vl" id="d-bal" style="color:#1a1a18;">¥0</div><div class="sb">예상 잔액</div></div>
     </div>
+
     <!-- 카드 -->
     <div class="g2" style="margin-bottom:10px;">
       <div class="kpi"><div class="lb">카드 확정 청구</div><div class="vl neg" id="d-cfix">¥0</div><div class="sb">인출 예정</div></div>
       <div class="kpi"><div class="lb">카드 미확정</div><div class="vl warn" id="d-cunfix">¥0</div><div class="sb">추후 확정</div></div>
     </div>
+
     <!-- 환율 -->
     <div class="rate-bar">
       <span>1 JPY = <b id="r-jpy-lbl">9.3</b>원</span>
@@ -206,9 +240,6 @@ body{font-family:sans-serif;background:#f5f5f3;color:#1a1a18;min-height:100vh;fo
       <span>1 USD = <b id="r-calc-lbl">1,395원</b></span>
       <button class="btn btn-s" onclick="openModal('m-rate')" style="margin-left:auto;">환율 설정</button>
     </div>
-    <!-- 고정 지출 요약 -->
-    <div class="stitle">고정 지출 목록</div>
-    <div id="d-fixed-list"></div>
   </div>
 
   <!-- 자산 -->
@@ -421,6 +452,7 @@ body{font-family:sans-serif;background:#f5f5f3;color:#1a1a18;min-height:100vh;fo
   <div class="mfoot"><button class="btn" onclick="closeModal('m-memo')">취소</button><button class="btn btn-p" onclick="saveMemo()">저장</button></div>
 </div></div>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -546,7 +578,7 @@ function norm(v){
   if(!v)return;
   v.assets=o2a(v.assets);v.cards=o2a(v.cards);
   v.exps=o2a(v.exps||v.expenses||[]);v.incs=o2a(v.incs||v.incomes||[]);
-  v.cats=o2a(v.cats);v.memos=o2a(v.memos||[]);
+  v.cats=o2a(v.cats);v.memos=o2a(v.memos||[]);v.snapshots=o2a(v.snapshots||[]);
   if(!v.nid)v.nid=600;
   v.cards.forEach(c=>{c.fixed=o2a(c.fixed);c.usages=o2a(c.usages);});
   const fn=a=>{
@@ -596,32 +628,6 @@ function go(name){
   if(name==='dash')rDash();else if(name==='assets')rAssets();else if(name==='cards')rCards();
   else if(name==='expense')renderExp();else if(name==='income')rInc();else if(name==='memo')rMemo();
   else if(name==='backup')rBackupInfo();
-}
-
-// ── 대시보드 ──
-function rDash(){
-  if(!S)return;
-  const r=S.rate,m=mth();
-  const exps=S.exps.filter(e=>ym(e.date)===m);
-  const incs=S.incs.filter(e=>ym(e.date)===m);
-  const expJ=exps.reduce((s,e)=>s+toJ(e.amt,e.cur,r),0);
-  const incJ=incs.reduce((s,e)=>s+toJ(e.amt,e.cur,r),0);
-  const fixJ=S.cards.reduce((s,c)=>s+c.fixed.reduce((a,f)=>a+toJ(f.amt,c.cur,r),0),0);
-  const unfJ=S.cards.reduce((s,c)=>s+c.usages.reduce((a,u)=>a+toJ(u.amt,c.cur,r),0),0);
-  const finJ=S.assets.filter(a=>a.type!=='debt'&&a.type!=='fixed').reduce((s,a)=>s+toJ(a.amt,a.cur,r),0);
-  const fixdJ=S.assets.filter(a=>a.type==='fixed').reduce((s,a)=>s+toJ(a.amt,a.cur,r),0);
-  const debtJ=S.assets.filter(a=>a.type==='debt').reduce((s,a)=>s+toJ(a.amt,a.cur,r),0);
-  const net=finJ+fixdJ-debtJ;
-  $('d-net').textContent='¥'+N(net);$('d-net-w').textContent='≈₩'+N(net*r.jk);
-  $('d-exp').textContent='¥'+N(expJ);$('d-exp-n').textContent=exps.length+'건';
-  $('d-inc').textContent='¥'+N(incJ);
-  $('d-cfix').textContent='¥'+N(fixJ);$('d-cunfix').textContent='¥'+N(unfJ);
-  $('r-jpy-lbl').textContent=r.jk+'원';$('r-usd-lbl').textContent=r.uj+'엔';
-  $('r-calc-lbl').textContent=N(Math.round(r.uj*r.jk))+'원';
-  const ratio=incJ>0?Math.min(Math.round(expJ/incJ*100),999):0;
-  $('d-ratio').textContent=ratio+'%';
-  const bar=$('d-bar');bar.style.width=Math.min(ratio,100)+'%';bar.className='prog-fill'+(ratio>90?' over':'');
-  $('d-bal').textContent='¥'+N(incJ-expJ);
 }
 
 // ── 자산 ──
@@ -739,6 +745,22 @@ function addCat(){const v=$('cat-new').value.trim();if(!v||S.cats.includes(v)){a
 function delCat(i){if(!confirm(`"${S.cats[i]}" 삭제?`))return;S.cats.splice(i,1);fbSave();rCatModal();}
 
 // ── 지출 ──
+// 차트 인스턴스
+let chartAsset=null,chartDebt=null,chartHistory=null;
+
+// ── 스냅샷 저장 ──
+function saveSnapshot(net){
+  if(!S)return;
+  if(!S.snapshots)S.snapshots=[];
+  const today=td();
+  // 오늘 이미 있으면 덮어쓰기
+  const idx=S.snapshots.findIndex(s=>s.d===today);
+  if(idx>=0)S.snapshots[idx].n=Math.round(net);
+  else S.snapshots.push({d:today,n:Math.round(net)});
+  // 최대 365일 보관
+  if(S.snapshots.length>365)S.snapshots=S.snapshots.slice(-365);
+}
+
 function rDash(){
   if(!S)return;
   const r=S.rate;
@@ -746,29 +768,100 @@ function rDash(){
   const incJ=S.incs.reduce((s,e)=>s+toJ(e.amt,e.cur,r),0);
   const fixJ=S.cards.reduce((s,c)=>s+c.fixed.reduce((a,f)=>a+toJ(f.amt,c.cur,r),0),0);
   const unfJ=S.cards.reduce((s,c)=>s+c.usages.reduce((a,u)=>a+toJ(u.amt,c.cur,r),0),0);
-  const finJ=S.assets.filter(a=>a.type!=='debt'&&a.type!=='fixed').reduce((s,a)=>s+toJ(a.amt,a.cur,r),0);
+  const jpJ =S.assets.filter(a=>a.type==='jp').reduce((s,a)=>s+toJ(a.amt,a.cur,r),0);
+  const krJ =S.assets.filter(a=>a.type==='kr').reduce((s,a)=>s+toJ(a.amt,a.cur,r),0);
+  const invJ=S.assets.filter(a=>a.type==='inv').reduce((s,a)=>s+toJ(a.amt,a.cur,r),0);
   const fixdJ=S.assets.filter(a=>a.type==='fixed').reduce((s,a)=>s+toJ(a.amt,a.cur,r),0);
   const debtJ=S.assets.filter(a=>a.type==='debt').reduce((s,a)=>s+toJ(a.amt,a.cur,r),0);
+  const finJ=jpJ+krJ+invJ;
   const net=finJ+fixdJ-debtJ;
+
+  // 스냅샷 저장
+  saveSnapshot(net);
+
+  // 순자산 표시
   $('d-net').textContent='¥'+N(net);
   $('d-net-w').textContent='≈₩'+N(net*r.jk);
-  $('d-exp').textContent='¥'+N(expJ);
-  $('d-exp-n').textContent=S.exps.length+'건';
-  $('d-inc').textContent='¥'+N(incJ);
-  $('d-inc-n').textContent=S.incs.length+'건';
+
+  // 전일/전달 비교
+  if(S.snapshots&&S.snapshots.length>0){
+    const today=td();
+    const yesterday=new Date(Date.now()-86400000).toISOString().slice(0,10);
+    const lastMonth=new Date(new Date().setMonth(new Date().getMonth()-1)).toISOString().slice(0,10).slice(0,7);
+    const yday=S.snapshots.filter(s=>s.d<today).slice(-1)[0];
+    const lmSnaps=S.snapshots.filter(s=>s.d.startsWith(lastMonth));
+    const lmDay=lmSnaps.length?lmSnaps[lmSnaps.length-1]:null;
+    const fmtDiff=(prev)=>{
+      if(!prev)return'—';
+      const diff=net-prev.n;
+      const sign=diff>=0?'+':'';
+      const col=diff>=0?'#1a7a40':'#c0392b';
+      return`<span style="color:${col};">${sign}¥${N(Math.abs(diff))}</span>`;
+    };
+    $('d-vs-day').innerHTML=fmtDiff(yday);
+    $('d-vs-month').innerHTML=fmtDiff(lmDay);
+  }
+
+  $('d-exp').textContent='¥'+N(expJ);$('d-exp-n').textContent=S.exps.length+'건';
+  $('d-inc').textContent='¥'+N(incJ);$('d-inc-n').textContent=S.incs.length+'건';
   const bal=incJ-expJ;
-  $('d-bal').textContent='¥'+N(bal);
-  $('d-bal').className='vl '+(bal>=0?'pos':'neg');
-  $('d-cfix').textContent='¥'+N(fixJ);
-  $('d-cunfix').textContent='¥'+N(unfJ);
-  $('r-jpy-lbl').textContent=r.jk+'원';
+  $('d-bal').textContent='¥'+N(bal);$('d-bal').className='vl '+(bal>=0?'pos':'neg');
+  $('d-cfix').textContent='¥'+N(fixJ);$('d-cunfix').textContent='¥'+N(unfJ);
+  $('r-jpy-lbl').textContent=r.jk;
   $('r-usd-lbl').textContent=r.uj+'엔';
   $('r-calc-lbl').textContent=N(Math.round(r.uj*r.jk))+'원';
-  // 고정 지출 목록
-  const fixed=S.exps.filter(e=>e.rec==='fixed'||e.rec===true);
-  $('d-fixed-list').innerHTML=fixed.length
-    ?fixed.map(e=>`<div class="item"><div class="item-main"><div class="item-name">${e.name}<span class="tag tag-fixed">고정</span></div><div class="item-sub">${e.cat}${e.date?' · '+e.date:''}</div></div><div class="amt neg">${SYM(e.cur)}${N(e.amt)}</div></div>`).join('')
-    :'<div class="empty">고정 지출 없음</div>';
+
+  // ── 자산 도넛 차트 ──
+  const aCtx=$('chart-asset').getContext('2d');
+  const aData=[
+    {label:'일본 금융', v:Math.max(jpJ,0),  color:'#185FA5'},
+    {label:'한국 금융', v:Math.max(krJ,0),  color:'#2E8B57'},
+    {label:'주식/투자', v:Math.max(invJ,0), color:'#F5A623'},
+    {label:'고정자산',  v:Math.max(fixdJ,0),color:'#9B59B6'},
+  ].filter(d=>d.v>0);
+  if(chartAsset)chartAsset.destroy();
+  if(aData.length){
+    chartAsset=new Chart(aCtx,{type:'doughnut',data:{
+      labels:aData.map(d=>d.label),
+      datasets:[{data:aData.map(d=>d.v),backgroundColor:aData.map(d=>d.color),borderWidth:2,borderColor:'#fff',hoverOffset:6}]
+    },options:{cutout:'65%',plugins:{legend:{display:false},tooltip:{callbacks:{label:(ctx)=>`¥${N(ctx.raw)}`}}},animation:{duration:600}}});
+    $('chart-asset-legend').innerHTML=aData.map(d=>`<span style="display:inline-flex;align-items:center;gap:3px;margin:2px 6px 2px 0;"><span style="width:8px;height:8px;border-radius:50%;background:${d.color};display:inline-block;"></span>${d.label} <b>¥${N(d.v)}</b></span>`).join('');
+  } else {
+    $('chart-asset-legend').innerHTML='<span style="color:#aaa;font-size:11px;">자산 없음</span>';
+  }
+
+  // ── 부채 도넛 차트 ──
+  const dCtx=$('chart-debt').getContext('2d');
+  const debtItems=S.assets.filter(a=>a.type==='debt').map(a=>({label:a.name,v:Math.abs(toJ(a.amt,a.cur,r))})).filter(d=>d.v>0);
+  const dColors=['#E74C3C','#C0392B','#FF6B6B','#FF8E8E','#FFB3B3','#FFCCCC'];
+  if(chartDebt)chartDebt.destroy();
+  if(debtItems.length){
+    chartDebt=new Chart(dCtx,{type:'doughnut',data:{
+      labels:debtItems.map(d=>d.label),
+      datasets:[{data:debtItems.map(d=>d.v),backgroundColor:debtItems.map((_,i)=>dColors[i%dColors.length]),borderWidth:2,borderColor:'#fff',hoverOffset:6}]
+    },options:{cutout:'65%',plugins:{legend:{display:false},tooltip:{callbacks:{label:(ctx)=>`¥${N(ctx.raw)}`}}},animation:{duration:600}}});
+    $('chart-debt-legend').innerHTML=debtItems.map((d,i)=>`<span style="display:inline-flex;align-items:center;gap:3px;margin:2px 6px 2px 0;"><span style="width:8px;height:8px;border-radius:50%;background:${dColors[i%dColors.length]};display:inline-block;"></span>${d.label} <b style="color:#c0392b;">¥${N(d.v)}</b></span>`).join('');
+    const totDebt=debtItems.reduce((s,d)=>s+d.v,0);
+    $('chart-debt-legend').innerHTML+=`<div style="margin-top:4px;font-weight:600;color:#c0392b;">합계 ¥${N(totDebt)}</div>`;
+  } else {
+    $('chart-debt-legend').innerHTML='<span style="color:#aaa;font-size:11px;">부채 없음</span>';
+  }
+
+  // ── 순자산 히스토리 라인 차트 ──
+  const hCtx=$('chart-history').getContext('2d');
+  if(chartHistory)chartHistory.destroy();
+  const snaps=S.snapshots?[...S.snapshots].sort((a,b)=>a.d.localeCompare(b.d)).slice(-30):[];
+  if(snaps.length>=2){
+    const labels=snaps.map(s=>s.d.slice(5)); // MM-DD
+    const vals=snaps.map(s=>s.n);
+    const minV=Math.min(...vals),maxV=Math.max(...vals);
+    chartHistory=new Chart(hCtx,{type:'line',data:{
+      labels,datasets:[{data:vals,borderColor:'#185FA5',backgroundColor:'rgba(24,95,165,0.08)',borderWidth:2,pointRadius:3,pointBackgroundColor:'#185FA5',tension:0.3,fill:true}]
+    },options:{plugins:{legend:{display:false},tooltip:{callbacks:{label:(ctx)=>`¥${N(ctx.raw)}`}}},scales:{x:{grid:{display:false},ticks:{font:{size:9}}},y:{grid:{color:'#f0f0f0'},ticks:{font:{size:9},callback:(v)=>'¥'+N(v)}}},animation:{duration:400}}});
+  } else {
+    hCtx.font='12px sans-serif';hCtx.fillStyle='#aaa';hCtx.textAlign='center';
+    hCtx.fillText('데이터 부족 (자산 수정 시 기록됩니다)',hCtx.canvas.width/2,60);
+  }
 }
 
 // ── 자산 ──
@@ -1019,7 +1112,7 @@ function restoreJSON(input){
       };
       v.assets=o2a(v.assets);v.cards=o2a(v.cards);
       v.exps=o2a(v.exps||v.expenses||[]);v.incs=o2a(v.incs||v.incomes||[]);
-      v.cats=o2a(v.cats);v.memos=o2a(v.memos||[]);
+      v.cats=o2a(v.cats);v.memos=o2a(v.memos||[]);v.snapshots=o2a(v.snapshots||[]);
       v.assets.forEach(fn);v.exps.forEach(fn);v.incs.forEach(fn);
       v.cards.forEach(c=>{c.fixed=o2a(c.fixed);c.usages=o2a(c.usages);fn(c);c.fixed.forEach(fn);c.usages.forEach(fn);});
       if(!v.rate.jk&&v.rate.jpyKrw)v.rate.jk=v.rate.jpyKrw;
