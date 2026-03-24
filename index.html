@@ -128,6 +128,11 @@ body{font-family:sans-serif;background:#f5f5f3;color:#1a1a18;min-height:100vh;fo
 .filter-btn.on{background:#185FA5;color:#fff;border-color:#185FA5;}
 .tag-fixed{background:#dbeafe;color:#1d4ed8;}
 .tag-var{background:#fef3c7;color:#92400e;}
+/* KPI 5개 그리드 - 모바일에서 작게 유지 */
+@media(max-width:400px){
+  #kpi5{grid-template-columns:repeat(3,1fr)!important;}
+  #kpi5 .kpi:nth-child(4),#kpi5 .kpi:nth-child(5){grid-column:span 1;}
+}
 /* 드래그 핸들 */
 .drag-handle{cursor:grab;color:#ccc;font-size:16px;padding:0 4px;user-select:none;flex-shrink:0;}
 .drag-handle:active{cursor:grabbing;}
@@ -225,17 +230,13 @@ body{font-family:sans-serif;background:#f5f5f3;color:#1a1a18;min-height:100vh;fo
       <canvas id="chart-history" style="max-height:90px;"></canvas>
     </div>
 
-    <!-- 4. 지출/수입/잔액 -->
-    <div class="kpi-grid" style="margin-bottom:10px;">
-      <div class="kpi"><div class="lb">지출 예정</div><div class="vl neg" id="d-exp">¥0</div><div class="sb" id="d-exp-n">0건</div></div>
-      <div class="kpi"><div class="lb">수입 예정</div><div class="vl pos" id="d-inc">¥0</div><div class="sb" id="d-inc-n">0건</div></div>
-      <div class="kpi"><div class="lb">수입-지출</div><div class="vl" id="d-bal">¥0</div><div class="sb">예상 잔액</div></div>
-    </div>
-
-    <!-- 5. 카드 -->
-    <div class="g2" style="margin-bottom:10px;">
-      <div class="kpi"><div class="lb">카드 확정 청구</div><div class="vl neg" id="d-cfix">¥0</div><div class="sb">인출 예정</div></div>
-      <div class="kpi"><div class="lb">카드 미확정</div><div class="vl warn" id="d-cunfix">¥0</div><div class="sb">추후 확정</div></div>
+    <!-- 4. KPI 5개 (2+3 or 5열) -->
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:10px;" id="kpi5">
+      <div class="kpi" style="padding:9px 7px;"><div class="lb" style="font-size:9px;">수입 예정</div><div style="font-size:13px;font-weight:600;color:#1a7a40;" id="d-inc">¥0</div><div class="sb" style="font-size:9px;" id="d-inc-n">0건</div></div>
+      <div class="kpi" style="padding:9px 7px;"><div class="lb" style="font-size:9px;">JRE 잔액</div><div style="font-size:13px;font-weight:600;color:#185FA5;" id="d-jre">¥0</div><div class="sb" style="font-size:9px;">카드결제통장</div></div>
+      <div class="kpi" style="padding:9px 7px;"><div class="lb" style="font-size:9px;">지출 예정</div><div style="font-size:13px;font-weight:600;color:#c0392b;" id="d-exp">¥0</div><div class="sb" style="font-size:9px;" id="d-exp-n">0건</div></div>
+      <div class="kpi" style="padding:9px 7px;"><div class="lb" style="font-size:9px;">카드 확정</div><div style="font-size:13px;font-weight:600;color:#c0392b;" id="d-cfix">¥0</div><div class="sb" style="font-size:9px;">인출 예정</div></div>
+      <div class="kpi" style="padding:9px 7px;"><div class="lb" style="font-size:9px;">카드 미확정</div><div style="font-size:13px;font-weight:600;color:#d4890a;" id="d-cunfix">¥0</div><div class="sb" style="font-size:9px;">추후 확정</div></div>
     </div>
 
     <!-- 6. 환율 -->
@@ -810,7 +811,9 @@ function rDash(){
   $('d-exp').textContent='¥'+N(expJ);$('d-exp-n').textContent=S.exps.length+'건';
   $('d-inc').textContent='¥'+N(incJ);$('d-inc-n').textContent=S.incs.length+'건';
   const bal=incJ-expJ;
-  $('d-bal').textContent='¥'+N(bal);$('d-bal').className='vl '+(bal>=0?'pos':'neg');
+  // JRE 잔액 - 자산에서 자동 읽기
+  const jreAsset=S.assets.find(a=>a.name&&a.name.toUpperCase().includes('JRE')&&a.type==='jp');
+  $('d-jre').textContent=jreAsset?'¥'+N(jreAsset.amt):'—';
   $('d-cfix').textContent='¥'+N(fixJ);$('d-cunfix').textContent='¥'+N(unfJ);
   $('r-jpy-lbl').textContent=r.jk;
   $('r-usd-lbl').textContent=r.uj+'엔';
