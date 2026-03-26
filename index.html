@@ -426,6 +426,14 @@ body{font-family:sans-serif;background:#f5f5f3;color:#1a1a18;min-height:100vh;fo
   <div class="mfoot"><button class="btn" onclick="closeModal('m-asset')">취소</button><button class="btn btn-p" onclick="saveAsset()">저장</button></div>
 </div></div>
 
+<!-- ── 모달: 확정 합산 선택 ── -->
+<div class="modal-bg" id="m-conf"><div class="modal">
+  <h3 id="conf-modal-title">확정 항목 선택</h3>
+  <p style="font-size:11px;color:#888;margin-bottom:10px;">합산할 확정 항목을 선택하세요</p>
+  <div id="conf-modal-list"></div>
+  <div class="mfoot"><button class="btn" onclick="closeModal('m-conf')">취소</button></div>
+</div></div>
+
 <!-- ── 모달: 카드 추가 ── -->
 <div class="modal-bg" id="m-card-add"><div class="modal">
   <h3>카드 추가</h3>
@@ -774,8 +782,51 @@ function saveCardUse(){
 }
 function confU(cid,uid){
   const c=S.cards.find(x=>x.id===cid),u=c&&c.usages.find(x=>x.id===uid);if(!u)return;
-  if(!confirm(`"${u.name}" 확정 처리?`))return;
-  c.usages=c.usages.filter(x=>x.id!==uid);c.fixed.push({id:S.nid++,date:u.date,name:u.name+'(확정)',amt:u.amt});
+  const sym=SYM(c.cur);
+
+  // 확정 항목이 없으면 새 확정 항목으로 추가
+  if(!c.fixed.length){
+    if(!confirm(`"${u.name}" ${sym}${N(u.amt)}\n\n확정 항목이 없어 새 확정 항목으로 추가합니다.`))return;
+    c.usages=c.usages.filter(x=>x.id!==uid);
+    c.fixed.push({id:S.nid++,date:u.date,name:u.name,amt:u.amt});
+    fbSave();rCards();rDash();return;
+  }
+
+  // 확정 항목 선택 모달 표시
+  $('conf-modal-title').textContent=`"${u.name}" ${sym}${N(u.amt)} 합산`;
+  $('conf-modal-list').innerHTML=c.fixed.map(f=>
+    `<div class="item" style="cursor:pointer;margin-bottom:6px;" onclick="doConfU(${cid},${uid},${f.id})">
+      <div class="item-main">
+        <div class="item-name">${f.name}</div>
+        <div class="item-sub">${f.date}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="neg" style="font-weight:600;">${sym}${N(f.amt)}</span>
+        <span style="color:#185FA5;font-size:11px;">→ ${sym}${N(f.amt+u.amt)}</span>
+      </div>
+    </div>`
+  ).join('')
+  + `<div class="item" style="cursor:pointer;background:#f0f7ff;border-color:#185FA5;" onclick="doConfU(${cid},${uid},-1)">
+      <div class="item-main"><div class="item-name" style="color:#185FA5;">+ 새 확정 항목으로 추가</div></div>
+    </div>`;
+  // 현재 카드 ID 저장
+  $('conf-modal-list').dataset.cid=cid;
+  $('conf-modal-list').dataset.uid=uid;
+  openModal('m-conf');
+}
+
+function doConfU(cid,uid,fid){
+  const c=S.cards.find(x=>x.id===cid),u=c&&c.usages.find(x=>x.id===uid);if(!u)return;
+  c.usages=c.usages.filter(x=>x.id!==uid);
+  if(fid===-1){
+    // 새 확정 항목으로 추가
+    c.fixed.push({id:S.nid++,date:u.date,name:u.name,amt:u.amt});
+  } else {
+    // 기존 확정 항목에 합산
+    const f=c.fixed.find(x=>x.id===fid);if(!f)return;
+    f.amt+=u.amt;
+  }
+  closeModal('m-conf');
   fbSave();rCards();rDash();
 }
 function delCI(cid,field,uid){
