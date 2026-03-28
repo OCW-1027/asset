@@ -607,13 +607,24 @@ function defData(){
 }
 
 // ── 상태 / 저장 ──
-let S=null, fbRef=null, stimer=null;
+let S=null, fbRef=null, stimer=null, isSaving=false;
 function lsLoad(){try{const r=localStorage.getItem(LS);return r?JSON.parse(r):null;}catch(e){return null;}}
 function lsSave(){try{localStorage.setItem(LS,JSON.stringify(S));}catch(e){}}
 function fbSave(){
-  lsSave();if(!fbRef)return;
-  setBadge('ing');clearTimeout(stimer);
-  stimer=setTimeout(()=>{fbRef.set(JSON.parse(JSON.stringify(S))).then(()=>setBadge('ok')).catch(()=>setBadge('off'));},800);
+  lsSave();
+  if(!fbRef)return;
+  // 저장할 때마다 nid를 타임스탬프로 갱신 → 항상 최신임을 보장
+  S.nid=Date.now();
+  lsSave();
+  setBadge('ing');
+  isSaving=true;
+  clearTimeout(stimer);
+  stimer=setTimeout(()=>{
+    const copy=JSON.parse(JSON.stringify(S));
+    fbRef.set(copy)
+      .then(()=>{setBadge('ok');setTimeout(()=>{isSaving=false;},1000);})
+      .catch(()=>{setBadge('off');isSaving=false;});
+  },800);
 }
 function setBadge(s){
   const el=$('sync-badge');if(!el)return;
@@ -667,10 +678,11 @@ function startApp(){
     fbRef.set(JSON.parse(JSON.stringify(S))).then(()=>setBadge('ok')).catch(()=>setBadge('off'));
     rDash();
     fbRef.on('value',snap2=>{
+      if(isSaving)return; // 저장 중엔 외부 업데이트 무시
       let v2=snap2.val();if(!v2)return;
       if(v2.assetData)v2=v2.assetData;
       if(!v2.assets)return;norm(v2);
-      if(v2.nid>=S.nid){S=v2;lsSave();setBadge('ok');rAll();}
+      if(v2.nid>S.nid){S=v2;lsSave();setBadge('ok');rAll();}
     });
   }).catch(e=>{console.error(e);setBadge('off');});
 }
