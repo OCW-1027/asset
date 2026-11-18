@@ -142,6 +142,31 @@ body{font-family:sans-serif;background:#f5f5f3;color:#1a1a18;min-height:100vh;fo
 .cat-item:last-child{border:none;}
 .add-row{display:flex;gap:6px;margin-top:10px;}
 .add-row input{flex:1;padding:7px 9px;border:1px solid #ddd;border-radius:8px;font-size:12px;}
+.btn:disabled{opacity:.45;cursor:default;}
+
+/* 전체 수정 */
+.tab-dot{display:none;width:6px;height:6px;border-radius:50%;background:#d4890a;margin-left:5px;vertical-align:middle;}
+.tab-dot.on{display:inline-block;}
+.bulk-hint{font-size:11px;color:#888;}
+.bulk-keys{display:none;}
+@media(min-width:768px){.bulk-keys{display:inline;}}
+.brow{display:flex;align-items:center;gap:6px;background:#fff;border:1px solid #eee;border-radius:8px;padding:4px 8px;margin-bottom:4px;}
+.brow.chg{border-color:#f0c36d;background:#fffaf0;}
+.brow .tag{margin-left:0;flex-shrink:0;}
+.blabel{flex:1;font-size:13px;font-weight:500;padding:6px 8px;}
+.bin{border:1px solid transparent;border-radius:6px;padding:6px 8px;font-size:13px;background:transparent;color:#1a1a18;min-width:0;font-family:inherit;}
+.bin:focus{outline:none;border-color:#185FA5;background:#fff;}
+.bname{flex:1;font-weight:500;}
+.bname:hover{border-color:#e3e3e0;}
+.bamt{width:128px;flex-shrink:0;text-align:right;font-weight:600;font-variant-numeric:tabular-nums;border-color:#e3e3e0;background:#fafaf8;}
+.bin.chg{border-color:#d4890a;background:#fff;}
+.bin.bad{border-color:#c0392b;background:#fdf0ef;}
+.bsign{flex-shrink:0;width:24px;height:26px;border:1px solid #e3e3e0;border-radius:6px;background:#fff;color:#888;font-size:12px;cursor:pointer;padding:0;}
+.bulk-bar{position:sticky;bottom:8px;display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #e6e6e2;border-radius:12px;padding:10px 12px;margin-top:14px;box-shadow:0 2px 16px rgba(0,0,0,.12);z-index:50;}
+.bulk-info{flex:1;min-width:0;font-size:12px;color:#555;line-height:1.5;}
+@media(max-width:420px){.bamt{width:108px;}.bulk-bar .btn{padding:7px 10px;}}
+#toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:#1a1a18;color:#fff;font-size:12px;padding:8px 16px;border-radius:20px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:300;white-space:nowrap;}
+#toast.on{opacity:1;}
 </style>
 </head>
 <body>
@@ -190,13 +215,14 @@ body{font-family:sans-serif;background:#f5f5f3;color:#1a1a18;min-height:100vh;fo
     </div>
   </div>
   <div class="tabs">
-    <div class="tab on"  onclick="go('dash')">대시보드</div>
-    <div class="tab" onclick="go('assets')">자산</div>
-    <div class="tab" onclick="go('cards')">카드</div>
-    <div class="tab" onclick="go('expense')">지출</div>
-    <div class="tab" onclick="go('income')">수입</div>
-    <div class="tab" onclick="go('memo')">메모</div>
-    <div class="tab" onclick="go('backup')">백업</div>
+    <div class="tab on" data-tab="dash" onclick="go('dash')">대시보드</div>
+    <div class="tab" data-tab="bulk" onclick="go('bulk')">전체수정<span class="tab-dot" id="bulk-dot"></span></div>
+    <div class="tab" data-tab="assets" onclick="go('assets')">자산</div>
+    <div class="tab" data-tab="cards" onclick="go('cards')">카드</div>
+    <div class="tab" data-tab="expense" onclick="go('expense')">지출</div>
+    <div class="tab" data-tab="income" onclick="go('income')">수입</div>
+    <div class="tab" data-tab="memo" onclick="go('memo')">메모</div>
+    <div class="tab" data-tab="backup" onclick="go('backup')">백업</div>
   </div>
   <div class="wrap">
 
@@ -260,6 +286,20 @@ body{font-family:sans-serif;background:#f5f5f3;color:#1a1a18;min-height:100vh;fo
       <span>1 USD = <b id="r-usd-lbl">150엔</b></span>
       <span>1 USD = <b id="r-calc-lbl">1,395원</b></span>
       <button class="btn btn-s" onclick="openModal('m-rate')" style="margin-left:auto;">환율 설정</button>
+    </div>
+  </div>
+
+  <!-- 전체 수정 -->
+  <div class="pg" id="pg-bulk">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px;">
+      <span style="font-size:14px;font-weight:600;">전체 수정</span>
+      <span class="bulk-hint">고친 뒤 [전체 적용]<span class="bulk-keys"> · Enter 다음 칸 · Ctrl+Enter 전체 적용</span></span>
+    </div>
+    <div id="bulk-body"></div>
+    <div class="bulk-bar">
+      <div class="bulk-info" id="bulk-info">변경 없음</div>
+      <button class="btn" id="bulk-reset" onclick="bulkReset()" disabled>되돌리기</button>
+      <button class="btn btn-p" id="bulk-apply" onclick="bulkApply()" disabled>전체 적용</button>
     </div>
   </div>
 
@@ -368,6 +408,8 @@ body{font-family:sans-serif;background:#f5f5f3;color:#1a1a18;min-height:100vh;fo
 
   </div><!-- end .wrap -->
 </div>
+
+<div id="toast"></div>
 
 <!-- 인쇄용 스타일 -->
 <style id="print-style"></style>
@@ -686,23 +728,24 @@ function startApp(){
     });
   }).catch(e=>{console.error(e);setBadge('off');});
 }
+// ── 탭 ──
+const TABS=[...document.querySelectorAll('.tab')].map(t=>t.dataset.tab);
+function curTab(){const t=document.querySelector('.tab.on');return t?t.dataset.tab:'dash';}
+function renderTab(n){
+  if(n==='dash')rDash();else if(n==='bulk')rBulk();else if(n==='assets')rAssets();else if(n==='cards')rCards();
+  else if(n==='expense')renderExp();else if(n==='income')rInc();else if(n==='memo')rMemo();
+  else if(n==='backup')rBackupInfo();
+}
 function rAll(){
   rDash();
-  const nm=document.querySelector('.tab.on');if(!nm)return;
-  const idx=[...document.querySelectorAll('.tab')].indexOf(nm);
-  const tabs=['dash','assets','cards','expense','income','memo'];
-  const n=tabs[idx];
-  if(n==='assets')rAssets();else if(n==='cards')rCards();else if(n==='expense')renderExp();else if(n==='income')rInc();else if(n==='memo')rMemo();
+  const n=curTab();
+  if(n!=='dash')renderTab(n);
 }
-
-// ── 탭 ──
 function go(name){
-  document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('on',['dash','assets','cards','expense','income','memo','backup'][i]===name));
+  document.querySelectorAll('.tab').forEach(el=>el.classList.toggle('on',el.dataset.tab===name));
   document.querySelectorAll('.pg').forEach(el=>el.classList.remove('on'));
   $('pg-'+name).classList.add('on');
-  if(name==='dash')rDash();else if(name==='assets')rAssets();else if(name==='cards')rCards();
-  else if(name==='expense')renderExp();else if(name==='income')rInc();else if(name==='memo')rMemo();
-  else if(name==='backup')rBackupInfo();
+  renderTab(name);
 }
 
 // ── 자산 ──
@@ -1208,6 +1251,161 @@ function rMemo(){
 }
 function delMemo(id){if(!confirm('삭제?'))return;S.memos=S.memos.filter(m=>m.id!==id);fbSave();rMemo();}
 
+// ── 전체 수정 ──
+// 고친 값은 [전체 적용] 전까지 bulkDraft에만 보관 (키: 종류|id|하위id|필드)
+let bulkDraft={};
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const bKey=(k,a,b,f)=>[k,a,b,f].join('|');
+const bField=key=>key.split('|')[3];
+const bIsNum=key=>bField(key)!=='name';
+function bulkObj(key){
+  const [k,a,b]=key.split('|');
+  if(k==='rate')return S.rate;
+  if(k==='a')return S.assets.find(x=>String(x.id)===a);
+  if(k==='e')return S.exps.find(x=>String(x.id)===a);
+  if(k==='i')return S.incs.find(x=>String(x.id)===a);
+  if(k==='cf'||k==='cu'){
+    const c=S.cards.find(x=>String(x.id)===a);
+    return c&&c[k==='cf'?'fixed':'usages'].find(x=>String(x.id)===b);
+  }
+}
+function parseAmt(s){
+  s=String(s).replace(/[０-９．－，]/g,ch=>String.fromCharCode(ch.charCodeAt(0)-0xFEE0)).replace(/[,\s¥￥₩$]/g,'');
+  return /^-?(\d+\.?\d*|\.\d+)$/.test(s)?parseFloat(s):NaN;
+}
+const fmtAmt=n=>Number(n).toLocaleString('en-US',{maximumFractionDigits:4});
+function bulkEval(key,str){
+  const o=bulkObj(key),orig=o?o[bField(key)]:undefined;
+  if(bIsNum(key)){
+    const v=parseAmt(str);
+    if(isNaN(v)||(key.startsWith('rate|')&&v<=0))return{bad:true};
+    return{bad:false,changed:Math.abs(v-Number(orig))>1e-9,val:v};
+  }
+  const v=String(str).trim();
+  if(!v)return{bad:true};
+  return{bad:false,changed:v!==String(orig==null?'':orig),val:v};
+}
+function bIn(key,cls,extra){
+  const o=bulkObj(key),orig=o?o[bField(key)]:'';
+  let shown=bIsNum(key)?fmtAmt(orig||0):(orig==null?'':orig),st={};
+  if(key in bulkDraft){
+    st=bulkEval(key,bulkDraft[key]);
+    shown=st.bad?bulkDraft[key]:(bIsNum(key)?fmtAmt(st.val):bulkDraft[key]);
+  }
+  return`<input class="bin ${cls}${st.bad?' bad':st.changed?' chg':''}" data-k="${esc(key)}" value="${esc(shown)}" ${extra||''} autocomplete="off">`;
+}
+function rBulk(){
+  if(!S)return;
+  Object.keys(bulkDraft).forEach(k=>{if(!bulkObj(k))delete bulkDraft[k];}); // 다른 기기에서 지워진 항목 정리
+  const body=$('bulk-body');
+  const ae=document.activeElement,fk=ae&&body.contains(ae)?ae.dataset.k:null;
+  const selS=fk?ae.selectionStart:0,selE=fk?ae.selectionEnd:0;
+  const tagCls=c=>c==='USD'?'t-usd':c==='KRW'?'t-g':'t-b';
+  const row=(k,a,b,cur,opt)=>{
+    opt=opt||{};
+    const html=`${opt.pre||''}${bIn(bKey(k,a,b,'name'),'bname')}<span class="tag ${tagCls(cur)}">${cur}</span>${opt.sign?'<button type="button" class="bsign" tabindex="-1" title="부호 바꾸기 (+/−)">±</button>':''}${bIn(bKey(k,a,b,'amt'),'bamt','inputmode="decimal"')}`;
+    return`<div class="brow${/class="bin [^"]*(chg|bad)/.test(html)?' chg':''}">${html}</div>`;
+  };
+  const sec=(title,rows,note)=>rows.length?`<div class="stitle">${title}${note?` <span style="text-transform:none;letter-spacing:0;font-weight:400;">· ${note}</span>`:''}</div>${rows.join('')}`:'';
+  const grp=t=>S.assets.filter(a=>a.type===t).map(a=>row('a',a.id,'',a.cur,{sign:t!=='debt'}));
+  const rrow=(label,f)=>{const h=bIn('rate|||'+f,'bamt','inputmode="decimal"');return`<div class="brow${/(chg|bad)"/.test(h.split('data-k')[0])?' chg':''}"><span class="blabel">${label}</span>${h}</div>`;};
+  const rate=`<div class="stitle">환율</div>${rrow('1 JPY = ? 원','jk')}${rrow('1 USD = ? 엔','uj')}`;
+  const cards=S.cards.map(c=>sec('카드 · '+esc(c.name),[
+    ...c.fixed.map(f=>row('cf',c.id,f.id,c.cur,{pre:'<span class="tag t-r">확정</span>'})),
+    ...c.usages.map(u=>row('cu',c.id,u.id,c.cur,{pre:'<span class="tag t-y">미확정</span>'}))
+  ])).join('');
+  const isFx=e=>e.rec==='fixed'||e.rec===true;
+  const exps=[...S.exps].sort((a,b)=>(isFx(a)?0:1)-(isFx(b)?0:1)||(b.date||'').localeCompare(a.date||''))
+    .map(e=>row('e',e.id,'',e.cur,{pre:`<span class="tag ${isFx(e)?'tag-fixed':'tag-var'}">${isFx(e)?'고정':'변동'}</span>`}));
+  const incs=[...S.incs].sort((a,b)=>(b.date||'').localeCompare(a.date||'')).map(e=>row('i',e.id,'',e.cur));
+  body.innerHTML=`<div class="pc2"><div>${rate}${sec('일본 금융',grp('jp'))}${sec('한국 금융',grp('kr'))}${sec('부채',grp('debt'),'양수로 입력')}${cards}</div>`
+    +`<div>${sec('주식 / 투자',grp('inv'))}${sec('고정자산',grp('fixed'))}${sec('지출',exps)}${sec('수입',incs)}</div></div>`;
+  if(fk){ // 입력 중에 다른 기기 변경이 들어와도 커서 유지
+    const el=[...body.querySelectorAll('.bin')].find(x=>x.dataset.k===fk);
+    if(el){bulkNoSel=true;el.focus();try{el.setSelectionRange(selS,selE);}catch(e){}bulkNoSel=false;}
+  }
+  bulkBar();
+}
+let bulkNoSel=false;
+function bulkNet(useDraft){
+  const gv=(key,fb)=>{if(useDraft&&key in bulkDraft){const st=bulkEval(key,bulkDraft[key]);if(!st.bad)return st.val;}return fb;};
+  const r={jk:gv('rate|||jk',S.rate.jk),uj:gv('rate|||uj',S.rate.uj)};
+  return S.assets.reduce((s,a)=>{const j=toJ(gv(bKey('a',a.id,'','amt'),a.amt),a.cur,r);return s+(a.type==='debt'?-j:j);},0);
+}
+function bulkBar(){
+  let chg=0,bad=0;
+  Object.keys(bulkDraft).forEach(k=>{const st=bulkEval(k,bulkDraft[k]);if(st.bad)bad++;else if(st.changed)chg++;});
+  $('bulk-dot').classList.toggle('on',chg+bad>0);
+  $('bulk-apply').disabled=!chg||bad>0;
+  $('bulk-reset').disabled=!(chg+bad);
+  let h='변경 없음';
+  if(chg+bad){
+    h=`변경 <b>${chg}건</b>`;
+    if(bad)h+=` · <span class="neg">입력 오류 ${bad}건</span>`;
+    else{
+      const d=bulkNet(true)-bulkNet(false);
+      if(Math.abs(d)>=1)h+=` · 순자산 <b class="${d>=0?'pos':'neg'}">${d>=0?'+':'−'}¥${N(Math.abs(d))}</b>`;
+    }
+  }
+  $('bulk-info').innerHTML=h;
+}
+function bulkTouch(el){
+  const k=el.dataset.k,st=bulkEval(k,el.value);
+  if(st.bad||st.changed)bulkDraft[k]=el.value;else delete bulkDraft[k];
+  el.classList.toggle('bad',!!st.bad);el.classList.toggle('chg',!st.bad&&!!st.changed);
+  const row=el.closest('.brow');if(row)row.classList.toggle('chg',!!row.querySelector('.bin.chg,.bin.bad'));
+  bulkBar();
+}
+function bulkReset(){
+  if(!Object.keys(bulkDraft).length)return;
+  if(!confirm('고친 내용을 모두 되돌릴까요?'))return;
+  bulkDraft={};rBulk();
+}
+function bulkApply(){
+  const ev=Object.keys(bulkDraft).map(k=>[k,bulkEval(k,bulkDraft[k])]);
+  if(!ev.length)return;
+  const bad=ev.filter(x=>x[1].bad).length;
+  if(bad){
+    const el=$('bulk-body').querySelector('.bin.bad');if(el)el.focus();
+    toast(`입력 오류 ${bad}건 — 빨간 칸을 확인하세요`);return;
+  }
+  let n=0;
+  ev.forEach(([k,st])=>{if(!st.changed)return;const o=bulkObj(k);if(!o)return;o[bField(k)]=st.val;n++;});
+  bulkDraft={};
+  if(n){fbSave();rDash();}
+  rBulk();
+  toast(n?`${n}건 적용했습니다`:'변경 없음');
+}
+let toastTimer=null;
+function toast(msg){
+  const el=$('toast');el.textContent=msg;el.classList.add('on');
+  clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('on'),2200);
+}
+(function(){
+  const body=$('bulk-body');
+  body.addEventListener('input',e=>{if(e.target.classList.contains('bin'))bulkTouch(e.target);});
+  body.addEventListener('focusin',e=>{if(e.target.classList.contains('bamt')&&!bulkNoSel)e.target.select();});
+  body.addEventListener('focusout',e=>{
+    const el=e.target;if(!el.classList.contains('bamt'))return;
+    const v=parseAmt(el.value);if(!isNaN(v))el.value=fmtAmt(v);
+  });
+  body.addEventListener('click',e=>{
+    const b=e.target.closest('.bsign');if(!b)return;
+    const inp=b.parentNode.querySelector('.bamt'),v=inp.value.trim();
+    inp.value=v.startsWith('-')?v.slice(1):'-'+v;bulkTouch(inp);
+  });
+  body.addEventListener('keydown',e=>{
+    if(e.key!=='Enter'||e.isComposing||e.keyCode===229)return; // 한글·일본어 조합 확정용 Enter는 제외
+    const el=e.target;if(!el.classList.contains('bin'))return;
+    e.preventDefault();
+    if(e.ctrlKey||e.metaKey){el.blur();bulkApply();return;}
+    const all=[...body.querySelectorAll(el.classList.contains('bamt')?'.bamt':'.bname')];
+    const nx=all[all.indexOf(el)+(e.shiftKey?-1:1)];
+    if(nx)nx.focus();else el.blur();
+  });
+  window.addEventListener('beforeunload',e=>{if(Object.keys(bulkDraft).length){e.preventDefault();e.returnValue='';}});
+})();
+
 // ── 백업 정보 ──
 function rBackupInfo(){
   if(!S)return;
@@ -1322,12 +1520,11 @@ function printPDF(section){
 
 // ── 스와이프 탭 전환 ──
 (function(){
-  const TABS=['dash','assets','cards','expense','income','memo','backup'];
   let tx=0,ty=0,swiping=false;
   const wrap=document.querySelector('.wrap');
   wrap.addEventListener('touchstart',e=>{
-    // 드래그 핸들 위에서는 스와이프 비활성화
-    if(e.target.classList.contains('drag-handle'))return;
+    // 드래그 핸들·입력칸 위에서는 스와이프 비활성화
+    if(e.target.classList.contains('drag-handle')||/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName))return;
     tx=e.touches[0].clientX;ty=e.touches[0].clientY;swiping=true;
   },{passive:true});
   wrap.addEventListener('touchmove',e=>{
@@ -1343,8 +1540,7 @@ function printPDF(section){
     const dy=e.changedTouches[0].clientY-ty;
     swiping=false;
     if(Math.abs(dx)<60||Math.abs(dy)>Math.abs(dx)*0.8)return; // 최소 60px, 세로 이동이 크면 무시
-    const cur=document.querySelector('.tab.on');
-    const idx=[...document.querySelectorAll('.tab')].indexOf(cur);
+    const idx=TABS.indexOf(curTab());
     if(dx<0&&idx<TABS.length-1) go(TABS[idx+1]); // 왼쪽 → 다음 탭
     if(dx>0&&idx>0)             go(TABS[idx-1]); // 오른쪽 → 이전 탭
   },{passive:true});
@@ -1364,9 +1560,28 @@ function openModal(id){
   if(id==='m-rate'){$('r-jpy').value=S.rate.jk;$('r-ujpy').value=S.rate.uj;$('r-ukrw').value=N(Math.round(S.rate.uj*S.rate.jk))+'원';}
   if(id==='m-cat')rCatModal();
   $(id).classList.add('on');
+  // PC에서는 바로 입력할 수 있게 포커스 (이름이 비어 있으면 이름, 아니면 금액)
+  const f=MODAL_FOCUS[id];
+  if(f&&window.matchMedia('(pointer:fine)').matches){
+    const el=$(f.find(x=>!$(x).value)||f[f.length-1]);
+    if(el){el.focus();if(el.select)el.select();}
+  }
 }
+const MODAL_FOCUS={'m-asset':['a-name','a-amt'],'m-exp':['e-name','e-amt'],'m-inc':['i-name','i-amt'],'m-card-use':['cu-name','cu-amt'],'m-card-add':['ca-name'],'m-cat':['cat-new'],'m-rate':['r-jpy'],'m-memo':['m-title-inp']};
 function closeModal(id){$(id).classList.remove('on');}
-document.querySelectorAll('.modal-bg').forEach(el=>el.addEventListener('click',e=>{if(e.target===el)el.classList.remove('on');}));
+// 창 바깥을 눌러도 닫히지 않음 (취소·저장 버튼, Enter, Esc로만 닫힘)
+document.addEventListener('keydown',e=>{
+  const m=document.querySelector('.modal-bg.on');if(!m)return;
+  if(e.isComposing||e.keyCode===229)return; // 한글·일본어 조합 중인 키는 무시
+  if(e.key==='Escape'){m.classList.remove('on');return;}
+  if(e.key!=='Enter')return;
+  const t=e.target;if(!m.contains(t))return;
+  if(t.id==='cat-new'){e.preventDefault();addCat();return;}
+  const ta=t.tagName==='TEXTAREA';
+  if(ta?!(e.ctrlKey||e.metaKey):t.tagName!=='INPUT')return; // 메모 본문은 Ctrl+Enter로 저장
+  const b=m.querySelector('.mfoot .btn-p');
+  if(b){e.preventDefault();b.click();}
+});
 </script>
 </body>
 </html>
