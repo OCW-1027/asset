@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
 <title>자산 관리</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
@@ -167,6 +167,22 @@ body{font-family:sans-serif;background:#f5f5f3;color:#1a1a18;min-height:100vh;fo
 @media(max-width:420px){.bamt{width:108px;}.bulk-bar .btn{padding:7px 10px;}}
 #toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:#1a1a18;color:#fff;font-size:12px;padding:8px 16px;border-radius:20px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:300;white-space:nowrap;}
 #toast.on{opacity:1;}
+
+/* ── 휴대폰 하단 메뉴 ── */
+.bnav,.bsheet{display:none;}
+@media(max-width:767px){
+  .tabs{display:none;}
+  #app{padding-bottom:calc(64px + env(safe-area-inset-bottom));}
+  .bnav{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:90;background:#fff;border-top:1px solid #e6e6e2;padding:4px 4px calc(4px + env(safe-area-inset-bottom));}
+  .bnav button{flex:1;position:relative;border:0;background:none;display:flex;flex-direction:column;align-items:center;gap:2px;padding:5px 0;font-size:10px;color:#8a8984;font-family:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent;}
+  .bnav button.on{color:#185FA5;font-weight:600;}
+  .bnav .tab-dot{position:absolute;top:4px;left:calc(50% + 9px);margin:0;}
+  .bsheet.on{display:grid;grid-template-columns:1fr 1fr;gap:8px;position:fixed;right:8px;left:8px;bottom:calc(68px + env(safe-area-inset-bottom));z-index:91;background:#fff;border:1px solid #e6e6e2;border-radius:14px;padding:10px;box-shadow:0 6px 24px rgba(0,0,0,.14);}
+  .bsheet button{border:1px solid #ecebe7;background:#f6f6f3;border-radius:10px;padding:12px 0;font-size:13px;font-family:inherit;color:#1a1a18;cursor:pointer;}
+  .bsheet button.on{background:#185FA5;border-color:#185FA5;color:#fff;font-weight:600;}
+  .bulk-bar{bottom:calc(70px + env(safe-area-inset-bottom));}
+  #toast{bottom:calc(136px + env(safe-area-inset-bottom));}
+}
 
 /* ── 대시보드 ── */
 .dcard{background:#fff;border:1px solid #ecebe7;border-radius:12px;padding:12px 14px;margin-bottom:10px;min-width:0;}
@@ -361,6 +377,7 @@ body{font-family:sans-serif;background:#f5f5f3;color:#1a1a18;min-height:100vh;fo
       <span>1 JPY = <b id="r-jpy-lbl">9.3</b>원</span>
       <span>1 USD = <b id="r-usd-lbl">150엔</b></span>
       <span>1 USD = <b id="r-calc-lbl">1,395원</b></span>
+      <span id="r-src" style="font-size:10px;"></span>
       <button class="btn btn-s" onclick="openModal('m-rate')" style="margin-left:auto;">환율 설정</button>
     </div>
   </div>
@@ -483,6 +500,19 @@ body{font-family:sans-serif;background:#f5f5f3;color:#1a1a18;min-height:100vh;fo
   </div>
 
   </div><!-- end .wrap -->
+
+  <!-- 휴대폰 하단 메뉴 -->
+  <nav class="bnav" id="bnav">
+    <button data-go="dash" class="on"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V11M10 20V5M16 20v-6M21 20H3"/></svg><span>대시보드</span></button>
+    <button data-go="bulk"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg><span>전체수정</span><i class="tab-dot" id="bulk-dot2"></i></button>
+    <button data-go="assets"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10l9-6 9 6"/><path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18"/></svg><span>자산</span></button>
+    <button data-go="cards"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M2.5 10h19M6 15h4"/></svg><span>카드</span></button>
+    <button data-go="more"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg><span>더보기</span></button>
+  </nav>
+  <div class="bsheet" id="bsheet">
+    <button data-go="expense">지출</button><button data-go="income">수입</button>
+    <button data-go="memo">메모</button><button data-go="backup">백업</button>
+  </div>
 </div>
 
 <div id="toast"></div>
@@ -586,7 +616,12 @@ body{font-family:sans-serif;background:#f5f5f3;color:#1a1a18;min-height:100vh;fo
   <h3>환율 설정</h3>
   <div class="field"><label>1 JPY = ? KRW</label><input type="number" id="r-jpy" step="0.01"></div>
   <div class="field"><label>1 USD = ? JPY</label><input type="number" id="r-ujpy" step="0.1"></div>
-  <div class="field"><label>1 USD = ? KRW (자동)</label><input type="text" id="r-ukrw" readonly style="background:#f5f5f3;color:#888;"></div>
+  <div class="field"><label>1 USD = ? KRW (자동 계산)</label><input type="text" id="r-ukrw" readonly style="background:#f5f5f3;color:#888;"></div>
+  <div class="field" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:0;font-size:12px;color:#1a1a18;"><input type="checkbox" id="r-auto" style="width:auto;"> 자동 갱신 (3시간마다)</label>
+    <button type="button" class="btn btn-s" id="r-now" onclick="refreshFxNow()">지금 갱신</button>
+  </div>
+  <div class="hint" id="r-info" style="font-size:11px;color:#8a8984;"></div>
   <div class="mfoot"><button class="btn" onclick="closeModal('m-rate')">취소</button><button class="btn btn-p" onclick="saveRate()">저장</button></div>
 </div></div>
 
@@ -900,6 +935,7 @@ function startApp(){
     fbReady=true;lsSave();rAll();
     if(!sameData(base,S))fbSave();else setBadge('ok');
     fbRef.on('value',s=>applyRemote(s.val()));
+    autoFx();
   }).catch(e=>{console.error(e);setBadge('off');});
 }
 // ── 탭 ──
@@ -915,8 +951,13 @@ function rAll(){
   const n=curTab();
   if(n!=='dash')renderTab(n);
 }
+const BNAV_MAIN=['dash','bulk','assets','cards'];
 function go(name){
   document.querySelectorAll('.tab').forEach(el=>el.classList.toggle('on',el.dataset.tab===name));
+  const slot=BNAV_MAIN.includes(name)?name:'more';
+  document.querySelectorAll('#bnav button').forEach(b=>b.classList.toggle('on',b.dataset.go===slot));
+  document.querySelectorAll('#bsheet button').forEach(b=>b.classList.toggle('on',b.dataset.go===name));
+  $('bsheet').classList.remove('on');
   document.querySelectorAll('.pg').forEach(el=>el.classList.remove('on'));
   $('pg-'+name).classList.add('on');
   renderTab(name);
@@ -1195,6 +1236,7 @@ function rDash(){
   $('r-jpy-lbl').textContent=r.jk;
   $('r-usd-lbl').textContent=r.uj+'엔';
   $('r-calc-lbl').textContent=N(Math.round(r.uj*r.jk))+'원';
+  $('r-src').textContent=fxInfo();
 
   // 리스트형 카드 (그래프 없이도 바로 읽히도록 수치 라벨 포함)
   const bar=(name,val,pct,color,sub)=>`<div class="brow2"><div class="bl-top"><span class="bl-name">${esc(name)}</span><span class="bl-val ${val<0?'neg':''}">${fmtMan(val)}${sub!=null?`<span class="bl-pct">${sub}</span>`:''}</span></div><div class="bl-track"><div class="bl-fill" style="width:${Math.max(1,Math.min(100,pct))}%;background:${color};${val<0?'opacity:.45;':''}"></div></div></div>`;
@@ -1567,7 +1609,7 @@ function bulkNet(useDraft){
 function bulkBar(){
   let chg=0,bad=0;
   Object.keys(bulkDraft).forEach(k=>{const st=bulkEval(k,bulkDraft[k]);if(st.bad)bad++;else if(st.changed)chg++;});
-  $('bulk-dot').classList.toggle('on',chg+bad>0);
+  $('bulk-dot').classList.toggle('on',chg+bad>0);$('bulk-dot2').classList.toggle('on',chg+bad>0);
   $('bulk-apply').disabled=!chg||bad>0;
   $('bulk-reset').disabled=!(chg+bad);
   let h='변경 없음';
@@ -1602,11 +1644,13 @@ function bulkApply(){
     toast(`입력 오류 ${bad}건 — 빨간 칸을 확인하세요`);return;
   }
   let n=0;
-  ev.forEach(([k,st])=>{if(!st.changed)return;const o=bulkObj(k);if(!o)return;o[bField(k)]=st.val;n++;});
+  let rateEdited=false;
+  ev.forEach(([k,st])=>{if(!st.changed)return;const o=bulkObj(k);if(!o)return;o[bField(k)]=st.val;n++;if(k.startsWith('rate|'))rateEdited=true;});
+  if(rateEdited){S.rate.auto=false;S.rate.src='manual';S.rate.ts=Date.now();}
   bulkDraft={};
   if(n){fbSave();rDash();}
   rBulk();
-  toast(n?`${n}건 적용했습니다`:'변경 없음');
+  toast(n?`${n}건 적용했습니다`+(rateEdited?' · 환율 자동 갱신 꺼짐':''):'변경 없음');
 }
 let toastTimer=null;
 function toast(msg){
@@ -1750,6 +1794,15 @@ function printPDF(section){
   setTimeout(()=>w.print(),500);
 }
 
+// ── 하단 메뉴 ──
+document.addEventListener('click',e=>{
+  const b=e.target.closest('#bnav button,#bsheet button');
+  const sh=$('bsheet');
+  if(!b){if(sh.classList.contains('on')&&!e.target.closest('#bsheet'))sh.classList.remove('on');return;} // 메뉴 바깥을 누르면 메뉴만 닫힘
+  if(b.dataset.go==='more'){sh.classList.toggle('on');return;}
+  go(b.dataset.go);window.scrollTo(0,0);
+});
+
 // ── 스와이프 탭 전환 ──
 (function(){
   let tx=0,ty=0,swiping=false;
@@ -1778,18 +1831,72 @@ function printPDF(section){
   },{passive:true});
 })();
 
+// ── 환율 자동 갱신 ──
+// 무료·키 불필요 API. 첫 번째가 실패하면 두 번째 사용. 갱신 시각은 동기화되므로 기기마다 중복 호출하지 않음.
+const FX_SRC=[
+  {name:'ExchangeRate-API',url:'https://open.er-api.com/v6/latest/USD',parse:d=>d&&d.result==='success'&&d.rates&&{jpy:d.rates.JPY,krw:d.rates.KRW}},
+  {name:'currency-api',url:'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.min.json',parse:d=>d&&d.usd&&{jpy:d.usd.jpy,krw:d.usd.krw}},
+];
+const FX_EVERY=3*3600*1000;
+let fxBusy=false;
+async function fetchFx(){
+  for(const s of FX_SRC){
+    try{
+      const ctl=new AbortController(),t=setTimeout(()=>ctl.abort(),8000);
+      const res=await fetch(s.url,{cache:'no-store',signal:ctl.signal});clearTimeout(t);
+      const p=s.parse(await res.json());
+      if(p&&p.jpy>50&&p.jpy<500&&p.krw>500&&p.krw<5000)return{...p,src:s.name}; // 비정상 값 방어
+    }catch(e){}
+  }
+  return null;
+}
+async function autoFx(force){
+  if(!S||fxBusy)return false;
+  const r=S.rate;
+  if(!force&&(r.auto===false||(r.ts&&Date.now()-r.ts<FX_EVERY)))return false;
+  fxBusy=true;const f=await fetchFx();fxBusy=false;
+  if(!f){if(force)toast('환율을 가져오지 못했습니다 — 잠시 후 다시 시도하세요');return false;}
+  S.rate.uj=+f.jpy.toFixed(2);
+  S.rate.jk=+(f.krw/f.jpy).toFixed(3);
+  S.rate.ts=Date.now();S.rate.src=f.src;
+  if(force)S.rate.auto=S.rate.auto!==false;
+  fbSave();rAll();
+  if(force)toast(`환율 갱신: 1 USD = ${S.rate.uj}엔 · 1 JPY = ${S.rate.jk}원`);
+  return true;
+}
+function fxInfo(long){
+  const r=S&&S.rate;if(!r)return'';
+  const when=r.ts?new Date(r.ts).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'';
+  if(r.auto===false)return long?'수동 입력'+(when?` · ${when}`:''):'수동';
+  if(!r.ts||r.src==='manual')return long?'자동 갱신 대기 중':'자동';
+  return long?`자동 · ${when} 갱신 (${r.src})`:`자동 · ${when}`;
+}
+async function refreshFxNow(){
+  const b=$('r-now');b.disabled=true;b.textContent='가져오는 중…';
+  const okk=await autoFx(true);
+  b.disabled=false;b.textContent='지금 갱신';
+  if(okk){$('r-jpy').value=S.rate.jk;$('r-ujpy').value=S.rate.uj;$('r-ukrw').value=N(Math.round(S.rate.uj*S.rate.jk))+'원';$('r-auto').checked=S.rate.auto!==false;$('r-info').textContent=fxInfo(true);}
+}
+setInterval(()=>{if(fbReady)autoFx();},30*60*1000);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&fbReady)autoFx();});
+
 // ── 환율 ──
+['r-jpy','r-ujpy'].forEach(id=>$(id).addEventListener('input',()=>{$('r-auto').checked=false;})); // 직접 입력하면 자동 갱신 해제
 $('r-ujpy').addEventListener('input',()=>{const j=parseFloat($('r-ujpy').value)||0,k=parseFloat($('r-jpy').value)||(S?S.rate.jk:9.3);$('r-ukrw').value=j>0?N(Math.round(j*k))+'원':'—';});
 $('r-jpy').addEventListener('input',()=>{const k=parseFloat($('r-jpy').value)||0,j=parseFloat($('r-ujpy').value)||(S?S.rate.uj:150);$('r-ukrw').value=k>0?N(Math.round(j*k))+'원':'—';});
 function saveRate(){
-  const j=parseFloat($('r-jpy').value),u=parseFloat($('r-ujpy').value);
+  const j=parseFloat($('r-jpy').value),u=parseFloat($('r-ujpy').value),auto=$('r-auto').checked;
+  const changed=(j>0&&j!==S.rate.jk)||(u>0&&u!==S.rate.uj),wasAuto=S.rate.auto!==false;
   if(j>0)S.rate.jk=j;if(u>0)S.rate.uj=u;
-  fbSave();closeModal('m-rate');rDash();if($('pg-assets').classList.contains('on'))rAssets();
+  if(changed){S.rate.src='manual';S.rate.ts=Date.now();}
+  S.rate.auto=auto;
+  fbSave();closeModal('m-rate');rAll();
+  if(auto&&!wasAuto)autoFx(true); // 자동 갱신을 다시 켜면 바로 최신 환율로
 }
 
 // ── 모달 ──
 function openModal(id){
-  if(id==='m-rate'){$('r-jpy').value=S.rate.jk;$('r-ujpy').value=S.rate.uj;$('r-ukrw').value=N(Math.round(S.rate.uj*S.rate.jk))+'원';}
+  if(id==='m-rate'){$('r-jpy').value=S.rate.jk;$('r-ujpy').value=S.rate.uj;$('r-ukrw').value=N(Math.round(S.rate.uj*S.rate.jk))+'원';$('r-auto').checked=S.rate.auto!==false;$('r-info').textContent=fxInfo(true);}
   if(id==='m-cat')rCatModal();
   $(id).classList.add('on');
   // PC에서는 바로 입력할 수 있게 포커스 (이름이 비어 있으면 이름, 아니면 금액)
