@@ -800,9 +800,17 @@ function mergeList(b,l,r,key,itemMerge){
     if(R.has(k))return;
     if(!B.has(k)||!same(li,B.get(k)))res.set(k,li);  // 내가 추가했거나, 상대가 지웠지만 내가 고친 항목
   });
+  // 순서: 내가 기존 항목 순서를 바꿨으면 내 순서, 아니면 서버 순서를 기준으로 삼고,
+  // 나머지 쪽에만 있는 항목(새로 추가된 것 등)은 맨 끝에 있었으면 끝에, 아니면 바로 앞 항목 뒤에 끼워 넣음
   const bo=b.map(id).filter(k=>L.has(k)).join(),lo=l.map(id).filter(k=>B.has(k)).join();
-  const first=bo!==lo?l:r,second=bo!==lo?r:l,order=[];  // 내가 순서를 바꿨으면 내 순서 우선
-  [first,second].forEach(a=>a.forEach(x=>{const k=id(x);if(res.has(k)&&!order.includes(k))order.push(k);}));
+  const mine=bo!==lo,primary=mine?l:r,other=mine?r:l,order=[],has=new Set();
+  primary.forEach(x=>{const k=id(x);if(res.has(k)&&!has.has(k)){order.push(k);has.add(k);}});
+  const P=new Set(has);
+  other.forEach((x,i)=>{const k=id(x);if(!res.has(k)||has.has(k))return;
+    if(other.slice(i+1).every(y=>!P.has(id(y)))){order.push(k);has.add(k);return;}
+    let j=i-1;while(j>=0&&!has.has(id(other[j])))j--;
+    order.splice(j<0?0:order.indexOf(id(other[j]))+1,0,k);has.add(k);
+  });
   return order.map(k=>res.get(k));
 }
 function mergeSet(b,l,r){
@@ -932,7 +940,14 @@ function startApp(){
       else S=clone((local&&S.nid>v.nid)?S:v); // 이번 버전 첫 실행: 예전 방식대로 최신 쪽 사용
       base=v;
     }else base=null;                          // 서버가 비어 있으면 현재 데이터를 올림
-    fbReady=true;lsSave();rAll();
+    fbReady=true;
+    if(!S.ordV){ // 끌어서 정렬 도입 전 데이터: 화면에 보이던 순서를 저장 순서로 한 번만 고정
+      const fx=e=>(e.rec==='fixed'||e.rec===true)?0:1;
+      S.exps.sort((a,b)=>fx(a)-fx(b)||(b.date||'').localeCompare(a.date||''));
+      S.incs.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+      S.ordV=1;
+    }
+    lsSave();rAll();
     if(!sameData(base,S))fbSave();else setBadge('ok');
     fbRef.on('value',s=>applyRemote(s.val()));
     autoFx();
@@ -1416,16 +1431,26 @@ function saveExp(){
   else S.exps.push({id:newId(),...d});
   fbSave();closeModal('m-exp');renderExp();rDash();
 }
+// 화면에 보이는 항목들(필터 적용 시 일부)만 새 순서로 바꾸고, 안 보이는 항목의 자리는 그대로 둠
+function reorderSubset(arr,ids){
+  const set=new Set(ids.map(String)),slots=[],byId=new Map(arr.map(x=>[String(x.id),x]));
+  arr.forEach((x,i)=>{if(set.has(String(x.id)))slots.push(i);});
+  const out=arr.slice(),seq=ids.map(id=>byId.get(String(id))).filter(Boolean);
+  slots.forEach((pos,i)=>{if(seq[i])out[pos]=seq[i];});
+  return out;
+}
+// 다시 그릴 때마다 이전 드래그 기능을 정리하고 새로 연결 (중복 연결 방지)
+function dragSort(el,n,onOrder){
+  const old=Sortable.get(el);if(old)old.destroy();
+  if(n<2)return;
+  Sortable.create(el,{handle:'.drag-handle',animation:150,onEnd(){
+    onOrder([...el.querySelectorAll('[data-id]')].map(x=>parseInt(x.dataset.id)));
+  }});
+}
 function renderExp(){
   if(!S)return;
   const r=S.rate;
-  let list=[...S.exps].sort((a,b)=>{
-    // 고정 먼저, 그 다음 날짜 내림차순
-    const af=(a.rec==='fixed'||a.rec===true)?0:1;
-    const bf=(b.rec==='fixed'||b.rec===true)?0:1;
-    if(af!==bf)return af-bf;
-    return (b.date||'').localeCompare(a.date||'');
-  });
+  let list=[...S.exps]; // 저장된 순서 그대로 (끌어서 바꾼 순서 유지)
   if(expFilter==='fixed') list=list.filter(e=>e.rec==='fixed'||e.rec===true);
   else if(expFilter==='var') list=list.filter(e=>e.rec!=='fixed'&&e.rec!==true);
   const expEl=$('exp-list');
@@ -1433,13 +1458,7 @@ function renderExp(){
     const isFixed=e.rec==='fixed'||e.rec===true;
     return`<div class="item" data-id="${e.id}"><span class="drag-handle">⠿</span><div class="item-main"><div class="item-name">${e.name}<span class="tag ${isFixed?'tag-fixed':'tag-var'}">${isFixed?'고정':'변동'}</span></div><div class="item-sub">${e.date?' '+e.date+' ·':''} ${e.cat} · ≈¥${N(toJ(e.amt,e.cur,r))}</div></div><div class="item-r"><div class="amt neg">${SYM(e.cur)}${N(e.amt)}</div><button class="btn btn-s" onclick="openExpModal(${e.id})">수정</button><button class="btn btn-s btn-d" onclick="delExp(${e.id})">삭제</button></div></div>`;
   }).join('')||'<div class="empty">없음</div>';
-  if(list.length>1) Sortable.create(expEl,{handle:'.drag-handle',animation:150,onEnd(){
-    const ids=[...expEl.querySelectorAll('.item[data-id]')].map(x=>parseInt(x.dataset.id));
-    const filtered=S.exps.filter(e=>ids.includes(e.id));
-    const others=S.exps.filter(e=>!ids.includes(e.id));
-    const reordered=ids.map(id=>filtered.find(e=>e.id===id)).filter(Boolean);
-    S.exps=[...others,...reordered]; fbSave();
-  }});
+  dragSort(expEl,list.length,ids=>{S.exps=reorderSubset(S.exps,ids);fbSave();});
   const totJ=list.reduce((s,e)=>s+toJ(e.amt,e.cur,r),0);
   const cats=[...new Set(list.map(e=>e.cat))];
   $('exp-sum').innerHTML=cats.map(c=>{const s=list.filter(e=>e.cat===c).reduce((a,e)=>a+toJ(e.amt,e.cur,r),0);return`<div class="srow"><span>${c}</span><span>¥${N(s)}</span></div>`;}).join('')
@@ -1469,14 +1488,10 @@ function saveInc(){
 }
 function rInc(){
   if(!S)return;const r=S.rate;
-  const list=[...S.incs].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const list=[...S.incs]; // 저장된 순서 그대로
   const incEl=$('inc-list');
   incEl.innerHTML=list.map(e=>`<div class="item" data-id="${e.id}"><span class="drag-handle">⠿</span><div class="item-main"><div class="item-name">${e.name}</div><div class="item-sub">${e.date} · ≈¥${N(toJ(e.amt,e.cur,r))}</div></div><div class="item-r"><div class="amt pos">${SYM(e.cur)}${N(e.amt)}</div><button class="btn btn-s" onclick="openIncModal(${e.id})">수정</button><button class="btn btn-s btn-d" onclick="delInc(${e.id})">삭제</button></div></div>`).join('')||'<div class="empty">없음</div>';
-  if(list.length>1) Sortable.create(incEl,{handle:'.drag-handle',animation:150,onEnd(){
-    const ids=[...incEl.querySelectorAll('.item[data-id]')].map(x=>parseInt(x.dataset.id));
-    const reordered=ids.map(id=>S.incs.find(e=>e.id===id)).filter(Boolean);
-    S.incs=reordered; fbSave();
-  }});
+  dragSort(incEl,list.length,ids=>{S.incs=reorderSubset(S.incs,ids);fbSave();});
   const t=list.reduce((s,e)=>s+toJ(e.amt,e.cur,r),0);
   $('inc-total').textContent='¥'+N(t)+' (₩'+N(t*r.jk)+')';
 }
@@ -1589,9 +1604,9 @@ function rBulk(){
     ...c.usages.map(u=>row('cu',c.id,u.id,c.cur,{pre:'<span class="tag t-y">미확정</span>'}))
   ])).join('');
   const isFx=e=>e.rec==='fixed'||e.rec===true;
-  const exps=[...S.exps].sort((a,b)=>(isFx(a)?0:1)-(isFx(b)?0:1)||(b.date||'').localeCompare(a.date||''))
+  const exps=S.exps
     .map(e=>row('e',e.id,'',e.cur,{pre:`<span class="tag ${isFx(e)?'tag-fixed':'tag-var'}">${isFx(e)?'고정':'변동'}</span>`}));
-  const incs=[...S.incs].sort((a,b)=>(b.date||'').localeCompare(a.date||'')).map(e=>row('i',e.id,'',e.cur));
+  const incs=S.incs.map(e=>row('i',e.id,'',e.cur));
   body.innerHTML=`<div class="pc2"><div>${rate}${sec('일본 금융',grp('jp'))}${sec('한국 금융',grp('kr'))}${sec('부채',grp('debt'),'양수로 입력')}${cards}</div>`
     +`<div>${sec('주식 / 투자',grp('inv'))}${sec('고정자산',grp('fixed'))}${sec('지출',exps)}${sec('수입',incs)}</div></div>`;
   if(fk){ // 입력 중에 다른 기기 변경이 들어와도 커서 유지
