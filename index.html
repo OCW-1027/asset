@@ -726,24 +726,112 @@ function defData(){
 }
 
 // ── 상태 / 저장 ──
-let S=null, fbRef=null, stimer=null, isSaving=false, fbReady=false;
-function lsLoad(){try{const r=localStorage.getItem(LS);return r?JSON.parse(r):null;}catch(e){return null;}}
-function lsSave(){try{localStorage.setItem(LS,JSON.stringify(S));}catch(e){}}
+// 동기화 방식: base(마지막으로 서버와 맞춘 상태)와 S(내 화면 상태)의 차이만
+// 서버 최신값 위에 합쳐서(3-way merge) 트랜잭션으로 저장한다.
+// → 두 기기에서 동시에 고쳐도 서로 다른 항목·필드는 모두 보존되고,
+//   같은 항목의 같은 칸을 동시에 고친 경우에만 나중에 저장한 쪽이 남는다.
+let S=null, base=null, fbRef=null, stimer=null, fbReady=false, inFlight=false, online=true;
+function lsLoad(k){try{const r=localStorage.getItem(k||LS);return r?JSON.parse(r):null;}catch(e){return null;}}
+function lsSave(){try{localStorage.setItem(LS,JSON.stringify(S));if(base)localStorage.setItem(LS+'_base',JSON.stringify(base));}catch(e){}}
+const clone=o=>o==null?o:JSON.parse(JSON.stringify(o));
+// 서버는 키를 알파벳순으로 돌려주므로 키 순서와 무관하게 비교
+const stable=o=>JSON.stringify(o,(k,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.keys(v).sort().reduce((a,x)=>(a[x]=v[x],a),{}):v);
+const same=(a,b)=>stable(a)===stable(b);
+const sameData=(a,b)=>{const x=clone(a)||{},y=clone(b)||{};delete x.nid;delete y.nid;return same(x,y);};
+// 기기 간에 겹치지 않는 ID (예전 nid++ 방식은 두 기기가 같은 번호를 만들 수 있었음)
+const newId=()=>Date.now()*1000+Math.floor(Math.random()*1000);
+const emptyData=()=>({assets:[],cards:[],exps:[],incs:[],cats:[],memos:[],snapshots:[],rate:{}});
+
+// 필드 단위 병합: 내가 바꾼 칸은 내 값, 안 바꾼 칸은 서버 값
+function mergeObj(b,l,r,nested){
+  b=b||{};l=l||{};r=r||{};const out={};
+  new Set([...Object.keys(b),...Object.keys(l),...Object.keys(r)]).forEach(k=>{
+    if(nested&&nested[k]){out[k]=nested[k](b[k],l[k],r[k]);return;}
+    const v=same(l[k],b[k])?r[k]:l[k];
+    if(v!==undefined)out[k]=v;
+  });
+  return out;
+}
+// 목록 병합 (id 기준): 추가·삭제·수정·순서를 각각 반영
+function mergeList(b,l,r,key,itemMerge){
+  b=b||[];l=l||[];r=r||[];key=key||'id';itemMerge=itemMerge||mergeObj;
+  const id=x=>String(x[key]),M=a=>new Map(a.map(x=>[id(x),x]));
+  const B=M(b),L=M(l),R=M(r),res=new Map();
+  r.forEach(ri=>{const k=id(ri);
+    if(L.has(k))res.set(k,B.has(k)&&same(L.get(k),B.get(k))?ri:itemMerge(B.get(k)||{},L.get(k),ri));
+    else if(!B.has(k))res.set(k,ri);                 // 다른 기기에서 추가
+  });                                               // (내가 지운 항목은 제외)
+  l.forEach(li=>{const k=id(li);
+    if(R.has(k))return;
+    if(!B.has(k)||!same(li,B.get(k)))res.set(k,li);  // 내가 추가했거나, 상대가 지웠지만 내가 고친 항목
+  });
+  const bo=b.map(id).filter(k=>L.has(k)).join(),lo=l.map(id).filter(k=>B.has(k)).join();
+  const first=bo!==lo?l:r,second=bo!==lo?r:l,order=[];  // 내가 순서를 바꿨으면 내 순서 우선
+  [first,second].forEach(a=>a.forEach(x=>{const k=id(x);if(res.has(k)&&!order.includes(k))order.push(k);}));
+  return order.map(k=>res.get(k));
+}
+function mergeSet(b,l,r){
+  b=b||[];l=l||[];r=r||[];
+  const out=r.filter(x=>!(b.includes(x)&&!l.includes(x)));
+  l.forEach(x=>{if(!b.includes(x)&&!out.includes(x))out.push(x);});
+  return out;
+}
+function mergeData(b,l,r){
+  const L=(x,y,z)=>mergeList(x,y,z);
+  const card=(x,y,z)=>mergeObj(x,y,z,{fixed:L,usages:L});
+  return mergeObj(b||emptyData(),l,r,{
+    assets:L,exps:L,incs:L,memos:L,
+    cards:(x,y,z)=>mergeList(x,y,z,'id',card),
+    snapshots:(x,y,z)=>mergeList(x,y,z,'d').sort((p,q)=>p.d.localeCompare(q.d)),
+    cats:mergeSet,
+    rate:(x,y,z)=>mergeObj(x,y,z),
+  });
+}
+function readRemote(v){
+  if(v&&v.assetData)v=v.assetData;
+  if(!v||!v.assets)return null;
+  v=clone(v);norm(v);return v;
+}
+
 function fbSave(){
   lsSave();
-  if(!fbRef)return;
-  // 저장할 때마다 nid를 타임스탬프로 갱신 → 항상 최신임을 보장
-  S.nid=Date.now();
-  lsSave();
+  if(!fbRef||!fbReady)return;
   setBadge('ing');
-  isSaving=true;
   clearTimeout(stimer);
-  stimer=setTimeout(()=>{
-    const copy=JSON.parse(JSON.stringify(S));
-    fbRef.set(copy)
-      .then(()=>{setBadge('ok');setTimeout(()=>{isSaving=false;},1000);})
-      .catch(()=>{setBadge('off');isSaving=false;});
-  },800);
+  stimer=setTimeout(flushSave,600);
+}
+function flushSave(){
+  if(inFlight)return; // 진행 중인 저장이 끝나면 남은 변경을 다시 확인함
+  if(sameData(base,S)){setBadge(online?'ok':'off');return;}
+  inFlight=true;
+  const sent=clone(S),b=clone(base);
+  fbRef.transaction(cur=>{
+    // 서버값이 바뀌어 있으면 Firebase가 이 함수를 최신값으로 다시 호출함
+    const r=readRemote(cur);
+    const out=r?mergeData(b,sent,r):clone(sent);
+    out.nid=Date.now(); // 예전 버전 화면과의 호환용
+    return out;
+  },(err,committed,snap)=>{
+    inFlight=false;
+    if(err||!committed){console.error('save failed',err);setBadge('off');return;}
+    const v=readRemote(snap.val());
+    if(v){
+      // 저장하는 사이 화면에서 더 고친 내용이 있으면 그 위에 다시 얹음
+      S=clone(mergeData(sent,S,v));base=v;S.nid=v.nid;lsSave();rAll(); // S와 base는 항상 별개 객체
+    }
+    // 저장하는 동안 들어온 다른 기기 변경까지 반영한 최신값으로 한 번 더 맞춤
+    fbRef.once('value',s=>applyRemote(s.val()));
+    if(!sameData(base,S))fbSave();else setBadge(online?'ok':'off');
+  },false);
+}
+function applyRemote(raw){
+  if(inFlight)return; // 저장 완료 시점에 다시 맞춤
+  const v=readRemote(raw);if(!v)return;
+  if(base&&sameData(base,v)&&same(base.nid,v.nid))return;
+  const pending=base&&!sameData(base,S);
+  S=clone(pending?mergeData(base,S,v):v);
+  base=v;S.nid=v.nid;lsSave();rAll();
+  if(pending)fbSave();else setBadge(online?'ok':'off');
 }
 function setBadge(s){
   const el=$('sync-badge');if(!el)return;
@@ -791,22 +879,27 @@ function startApp(){
   $('hdr-date').textContent=new Date().toLocaleDateString('ko-KR');
   if(appStarted){rAll();return;} // 잠금 해제 시 동기화 리스너 중복 등록 방지
   appStarted=true;
-  S=lsLoad()||defData();norm(S);if(!lsLoad())lsSave();rDash();
+  const local=lsLoad();
+  S=local||defData();norm(S);
+  base=lsLoad(LS+'_base');if(base)norm(base);
+  if(!local)lsSave();
+  rDash();
   fbRef=fbDB.ref('/');
+  fbDB.ref('.info/connected').on('value',s=>{
+    online=s.val()!==false;
+    if(!fbReady)return;
+    if(!online)setBadge('off');else if(!inFlight&&sameData(base,S))setBadge('ok');else fbSave();
+  });
   fbRef.once('value').then(snap=>{
-    let v=snap.val();
-    if(v&&v.assetData)v=v.assetData;
-    if(v&&v.assets){norm(v);S=(S&&S.nid>=v.nid)?S:v;lsSave();}
-    fbReady=true;
-    fbRef.set(JSON.parse(JSON.stringify(S))).then(()=>setBadge('ok')).catch(()=>setBadge('off'));
-    rDash();
-    fbRef.on('value',snap2=>{
-      if(isSaving)return; // 저장 중엔 외부 업데이트 무시
-      let v2=snap2.val();if(!v2)return;
-      if(v2.assetData)v2=v2.assetData;
-      if(!v2.assets)return;norm(v2);
-      if(v2.nid>S.nid){S=v2;lsSave();setBadge('ok');rAll();}
-    });
+    const v=readRemote(snap.val());
+    if(v){
+      if(base)S=clone(mergeData(base,S,v));   // 지난번 이후 이 기기에서 저장 못 한 변경만 얹음
+      else S=clone((local&&S.nid>v.nid)?S:v); // 이번 버전 첫 실행: 예전 방식대로 최신 쪽 사용
+      base=v;
+    }else base=null;                          // 서버가 비어 있으면 현재 데이터를 올림
+    fbReady=true;lsSave();rAll();
+    if(!sameData(base,S))fbSave();else setBadge('ok');
+    fbRef.on('value',s=>applyRemote(s.val()));
   }).catch(e=>{console.error(e);setBadge('off');});
 }
 // ── 탭 ──
@@ -859,7 +952,7 @@ function saveAsset(){
   if(!d.name){alert('자산명을 입력하세요.');return;}
   if(type==='fixed'){d.fkind=$('a-fkind').value;d.fmemo=$('a-fmemo').value.trim();}
   if(eid){const i=S.assets.findIndex(a=>a.id===eid);if(i>=0)S.assets[i]={...S.assets[i],...d};}
-  else S.assets.push({id:S.nid++,...d});
+  else S.assets.push({id:newId(),...d});
   fbSave();closeModal('m-asset');rAssets();rDash();
 }
 $('a-amt').addEventListener('input',updUsdHint);$('a-cur').addEventListener('change',updUsdHint);
@@ -912,7 +1005,7 @@ function saveCardUse(){
     c[oldField]=c[oldField].filter(x=>x.id!==eiid);
     c[newField].push({id:eiid,...item});
   } else {
-    c[newField].push({id:S.nid++,...item});
+    c[newField].push({id:newId(),...item});
   }
   fbSave();closeModal('m-card-use');rCards();rDash();
 }
@@ -924,7 +1017,7 @@ function confU(cid,uid){
   if(!c.fixed.length){
     if(!confirm(`"${u.name}" ${sym}${N(u.amt)}\n\n확정 항목이 없어 새 확정 항목으로 추가합니다.`))return;
     c.usages=c.usages.filter(x=>x.id!==uid);
-    c.fixed.push({id:S.nid++,date:u.date,name:u.name,amt:u.amt});
+    c.fixed.push({id:newId(),date:u.date,name:u.name,amt:u.amt});
     fbSave();rCards();rDash();return;
   }
 
@@ -956,7 +1049,7 @@ function doConfU(cid,uid,fid){
   c.usages=c.usages.filter(x=>x.id!==uid);
   if(fid===-1){
     // 새 확정 항목으로 추가
-    c.fixed.push({id:S.nid++,date:u.date,name:u.name,amt:u.amt});
+    c.fixed.push({id:newId(),date:u.date,name:u.name,amt:u.amt});
   } else {
     // 기존 확정 항목에 합산
     const f=c.fixed.find(x=>x.id===fid);if(!f)return;
@@ -972,7 +1065,7 @@ function delCI(cid,field,uid){
 }
 function saveCard(){
   const name=$('ca-name').value.trim();if(!name){alert('카드명 입력.');return;}
-  S.cards.push({id:S.nid++,name,cur:$('ca-cur').value,fixed:[],usages:[]});
+  S.cards.push({id:newId(),name,cur:$('ca-cur').value,fixed:[],usages:[]});
   fbSave();closeModal('m-card-add');rCards();
 }
 function delCard(id){
@@ -1050,7 +1143,7 @@ function rDash(){
   if(!S)return;
   const r=S.rate,st=calcState();
   // 오늘 기록이 바뀌었으면 저장 (편집 저장과 합쳐지도록 짧게 지연)
-  if(saveSnapshot(st)){clearTimeout(snapSaveTimer);snapSaveTimer=setTimeout(()=>{if(fbReady)fbSave();else lsSave();},300);}
+  if(saveSnapshot(st)){clearTimeout(snapSaveTimer);snapSaveTimer=setTimeout(fbSave,300);}
 
   // 순자산
   $('d-net').textContent=yen(st.net);
@@ -1278,7 +1371,7 @@ function saveExp(){
   const d={date:$('e-date').value,name:$('e-name').value.trim(),amt:parseFloat($('e-amt').value)||0,cur:$('e-cur').value,cat:$('e-cat').value,rec:recVal};
   if(!d.name||!d.amt){alert('항목명과 금액을 입력하세요.');return;}
   if(eid){const i=S.exps.findIndex(e=>e.id===eid);if(i>=0)S.exps[i]={...S.exps[i],...d};}
-  else S.exps.push({id:S.nid++,...d});
+  else S.exps.push({id:newId(),...d});
   fbSave();closeModal('m-exp');renderExp();rDash();
 }
 function renderExp(){
@@ -1329,7 +1422,7 @@ function saveInc(){
   const d={date:$('i-date').value,name:$('i-name').value,amt:parseFloat($('i-amt').value)||0,cur:$('i-cur').value};
   if(!d.name||!d.amt){alert('항목명과 금액을 입력하세요.');return;}
   if(eid){const i=S.incs.findIndex(e=>e.id===eid);if(i>=0)S.incs[i]={...S.incs[i],...d};}
-  else S.incs.push({id:S.nid++,...d});
+  else S.incs.push({id:newId(),...d});
   fbSave();closeModal('m-inc');rInc();rDash();
 }
 function rInc(){
@@ -1366,7 +1459,7 @@ function saveMemo(){
   if(!title&&!body){alert('제목 또는 내용을 입력하세요.');return;}
   const d={title:title||'(제목 없음)',body,date:td()};
   if(eid){const i=S.memos.findIndex(m=>m.id===eid);if(i>=0)S.memos[i]={...S.memos[i],...d};}
-  else S.memos.push({id:S.nid++,...d});
+  else S.memos.push({id:newId(),...d});
   fbSave();closeModal('m-memo');rMemo();
 }
 let memoSortable=null;
@@ -1554,7 +1647,7 @@ function rBackupInfo(){
     <div>💸 지출 항목: <b>${S.exps.length}개</b></div>
     <div>💰 수입 항목: <b>${S.incs.length}개</b></div>
     <div>📝 메모: <b>${S.memos.length}개</b></div>
-    <div style="margin-top:8px;color:#aaa;">마지막 nid: ${S.nid}</div>
+    <div style="margin-top:8px;color:#aaa;">마지막 저장: ${S.nid>1e12?new Date(S.nid).toLocaleString('ko-KR'):'—'}</div>
   `;
 }
 
